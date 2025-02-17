@@ -1,0 +1,349 @@
+name: Multi-Role Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+    # Enables manual trigger in GitHub UI
+  schedule:
+    # Run every day at midnight
+    - cron: '0 0 * * *'
+
+env:
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  product-manager:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set Up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache Python packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Product Manager Agent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python ai_agents/product_manager.py \
+            --output docs/PRODUCT_SPECS.md
+
+      - name: Upload Artifact - Product Specs
+        uses: actions/upload-artifact@v3
+        with:
+          name: product-specs
+          path: docs/PRODUCT_SPECS.md
+
+  brainstorm-facilitator:
+    runs-on: ubuntu-latest
+    needs: [product-manager]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set Up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Download Product Specs
+        uses: actions/download-artifact@v3
+        with:
+          name: product-specs
+          path: docs
+
+      - name: Run Brainstorm Facilitator
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python ai_agents/brainstorm_facilitator.py \
+            --input docs/PRODUCT_SPECS.md \
+            --output docs/BRAINSTORM_OUTCOME.md
+
+      - name: Upload Artifact - Brainstorm Outcome
+        uses: actions/upload-artifact@v3
+        with:
+          name: brainstorm-outcome
+          path: docs/BRAINSTORM_OUTCOME.md
+
+  architect:
+    runs-on: ubuntu-latest
+    needs: [brainstorm-facilitator]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set Up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Download Brainstorm Outcome
+        uses: actions/download-artifact@v3
+        with:
+          name: brainstorm-outcome
+          path: docs
+
+      - name: Generate System Architecture
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python ai_agents/architect.py \
+            --input docs/BRAINSTORM_OUTCOME.md \
+            --output docs/SYSTEM_ARCHITECTURE.md
+
+      - name: Upload Artifact - System Architecture
+        uses: actions/upload-artifact@v3
+        with:
+          name: system-architecture
+          path: docs/SYSTEM_ARCHITECTURE.md
+
+  planner:
+    runs-on: ubuntu-latest
+    needs: [architect]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set Up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Download System Architecture
+        uses: actions/download-artifact@v3
+        with:
+          name: system-architecture
+          path: docs
+
+      - name: Generate Development Plan
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python ai_agents/planner.py \
+            --architecture docs/SYSTEM_ARCHITECTURE.md \
+            --output docs/PLAN.md
+
+      - name: Upload Artifact - Plan
+        uses: actions/upload-artifact@v3
+        with:
+          name: plan
+          path: docs/PLAN.md
+
+  engineer:
+    runs-on: ubuntu-latest
+    needs: [planner]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set Up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Download Plan
+        uses: actions/download-artifact@v3
+        with:
+          name: plan
+          path: docs
+
+      - name: Implement Code
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python ai_agents/engineer.py \
+            --plan docs/PLAN.md \
+            --output_code src/main_app/ \
+            --commit_summary docs/COMMIT_SUMMARY.md
+
+      - name: Upload Commit Summary
+        uses: actions/upload-artifact@v3
+        with:
+          name: commit-summary
+          path: docs/COMMIT_SUMMARY.md
+
+      - name: Upload Generated Code
+        uses: actions/upload-artifact@v3
+        with:
+          name: generated-code
+          path: src/main_app/
+
+  reviewer:
+    runs-on: ubuntu-latest
+    needs: [engineer]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set Up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Download Generated Code
+        uses: actions/download-artifact@v3
+        with:
+          name: generated-code
+          path: src/main_app/
+
+      - name: Download Commit Summary
+        uses: actions/download-artifact@v3
+        with:
+          name: commit-summary
+          path: docs
+
+      - name: Run Code Review
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python ai_agents/reviewer.py \
+            --commit_summary docs/COMMIT_SUMMARY.md \
+            --code_dir src/main_app/ \
+            --output docs/REVIEW.md
+
+      - name: Upload Review
+        uses: actions/upload-artifact@v3
+        with:
+          name: review
+          path: docs/REVIEW.md
+
+  qa:
+    runs-on: ubuntu-latest
+    needs: [reviewer]
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10']
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set Up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Download Generated Code
+        uses: actions/download-artifact@v3
+        with:
+          name: generated-code
+          path: src/main_app/
+
+      - name: Download Review
+        uses: actions/download-artifact@v3
+        with:
+          name: review
+          path: docs
+
+      - name: Install Test Dependencies
+        run: |
+          pip install pytest pytest-cov playwright
+          playwright install
+
+      - name: Run Tests
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python ai_agents/qa_engineer.py \
+            --code_dir src/main_app/ \
+            --review docs/REVIEW.md \
+            --output docs/TEST_DEBUG_REPORT.md
+
+      - name: Upload Test Report
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-debug-report-${{ matrix.python-version }}
+          path: docs/TEST_DEBUG_REPORT.md
+
+  staging-deploy:
+    runs-on: ubuntu-latest
+    needs: [qa]
+    environment:
+      name: staging
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Download Generated Code
+        uses: actions/download-artifact@v3
+        with:
+          name: generated-code
+          path: src/main_app/
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy to Staging
+        run: |
+          python scripts/deploy.py \
+            --env staging \
+            --code_dir src/main_app/
+
+      - name: Run Smoke Tests
+        run: |
+          python scripts/smoke_test.py \
+            --env staging
+
+  production-approval:
+    runs-on: ubuntu-latest
+    needs: [staging-deploy]
+    environment:
+      name: production
+    steps:
+      - name: Await Production Approval
+        run: echo "Manual approval required for production deployment"
+
+  production-deploy:
+    runs-on: ubuntu-latest
+    needs: [production-approval]
+    environment:
+      name: production
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Download Generated Code
+        uses: actions/download-artifact@v3
+        with:
+          name: generated-code
+          path: src/main_app/
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy to Production
+        run: |
+          python scripts/deploy.py \
+            --env production \
+            --code_dir src/main_app/
+
+      - name: Monitor Deployment
+        run: |
+          python scripts/monitor_deployment.py \
+            --env production \
+            --duration 300  # Monitor for 5 minutes post-deployment
