@@ -83,14 +83,28 @@ jobs:
       - name: Run initial analysis
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           echo "Current directory: $(pwd)"
-          echo "Directory contents:"
+          echo "PYTHONPATH: $PYTHONPATH"
+          echo "\nDirectory contents:"
           ls -la
-          echo "Tests directory contents:"
+          
+          echo "\nTests directory contents:"
           ls -la tests/
-          echo "Running tests..."
-          python -m pytest tests/test_initial_analysis.py -v
+          
+          echo "\nPython version and location:"
+          which python
+          python --version
+          
+          echo "\nInstalled packages:"
+          pip list
+          
+          echo "\nTest collection only:"
+          python -m pytest tests/test_initial_analysis.py --collect-only -v
+          
+          echo "\nRunning tests with full debug output:"
+          python -m pytest tests/test_initial_analysis.py -v --tb=long
 
   planning_and_implementation:
     needs: [initial_analysis]
