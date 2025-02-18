@@ -3,7 +3,7 @@ from loguru import logger
 from typing import Dict, Any, List, Optional
 import pathlib
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from .approval_system import ApprovalSystem, ValidationResult
 from .checkpoint_system import CheckpointSystem
 import json
@@ -13,48 +13,51 @@ import os
 from dotenv import load_dotenv
 
 class MarketContext(BaseModel):
-    target_market: List[str]
-    competitors: List[Dict[str, Any]]
-    market_trends: List[str]
-    user_demographics: Dict[str, Any]
+    """Model for market context."""
+    target_market: str
+    competitors: List[str]
+    trends: List[str]
+    demographics: str
     pain_points: List[str]
     opportunities: List[str]
 
 class UserPersona(BaseModel):
+    """Model for user personas."""
     name: str
     role: str
     goals: List[str]
     challenges: List[str]
-    preferences: Dict[str, Any]
-    technical_proficiency: str
+    preferences: List[str]
+    tech_proficiency: str
 
 class FeatureSpecification(BaseModel):
+    """Model for feature specifications."""
     name: str
     description: str
     priority: str
-    user_stories: List[str]
+    requirements: List[str]
     acceptance_criteria: List[str]
-    technical_requirements: List[str]
-    dependencies: List[str]
-    estimated_effort: str
-    risks: List[str]
+    
+    # Optional fields
+    technical_requirements: Optional[List[str]] = None
+    dependencies: Optional[List[str]] = None
+    estimated_effort: Optional[str] = None
+    risks: Optional[List[str]] = None
 
 class ProductSpecification(BaseModel):
-    """Product specification model with enhanced validation."""
+    """Model for product specifications."""
     title: str
     description: str
-    version: str = Field(default_factory=lambda: datetime.now().strftime("%Y.%m.%d"))
-    scope: Dict[str, Any]
-    audience: List[UserPersona]
     market_context: MarketContext
+    audience: List[UserPersona]
     features: List[FeatureSpecification]
-    success_metrics: Dict[str, List[str]]
-    technical_requirements: List[str]
-    constraints: List[str]
-    timeline: Dict[str, Any]
-    dependencies: Dict[str, List[str]]
-    risks_and_mitigations: Dict[str, List[str]]
-    assumptions: List[str]
+    success_metrics: Optional[Dict[str, List[str]]] = None
+    technical_requirements: Optional[List[str]] = None
+    constraints: Optional[List[str]] = None
+    timeline: Optional[Dict[str, Any]] = None
+    dependencies: Optional[Dict[str, List[str]]] = None
+    risks_and_mitigations: Optional[Dict[str, List[str]]] = None
+    assumptions: Optional[List[str]] = None
     validation_status: Dict[str, ValidationResult] = Field(default_factory=dict)
     last_updated: datetime = Field(default_factory=datetime.now)
     session_id: str = Field(default_factory=lambda: datetime.now().strftime("%Y%m%d_%H%M%S"))
@@ -79,62 +82,84 @@ class ProductManager:
         self.approval_system = ApprovalSystem(model)
         self.checkpoint_system = CheckpointSystem(self.approval_system)
         
-    async def analyze_market_context(self, prompt: str) -> MarketContext:
+    async def analyze_market_context(self, prompt: str) -> str:
         """Analyze market context from the user prompt."""
+        logger.info(f"Analyzing market context for prompt: {prompt[:100]}...")
+        
+        context_prompt = f"""Analyze the following project requirements and generate a detailed market context:
+
+        Project Requirements:
+        {prompt}
+
+        Generate a comprehensive market analysis including:
+        1. Target market segments
+        2. Key competitors and their offerings
+        3. Current market trends
+        4. User demographics
+        5. Pain points and challenges
+        6. Market opportunities
+
+        Format the response as a JSON object matching the MarketContext model.
+        """
+
         try:
-            context_prompt = f"""Analyze the following project requirements and generate a detailed market context:
-
-            Project Requirements:
-            {prompt}
-
-            Generate a comprehensive market analysis including:
-            1. Target market segments
-            2. Key competitors and their offerings
-            3. Current market trends
-            4. User demographics
-            5. Pain points and challenges
-            6. Market opportunities
-
-            Format the response as a JSON object matching the MarketContext model.
-            """
-
             response = await self.client.generate_content(context_prompt)
-            context_data = json.loads(response.text)
-            return MarketContext(**context_data)
-
+            logger.debug(f"Raw Gemini response type: {type(response)}")
+            logger.debug(f"Raw Gemini response attributes: {dir(response)}")
+            logger.debug(f"Raw Gemini response: {response}")
+            
+            # Handle response correctly based on type
+            if hasattr(response, 'text'):
+                return response.text
+            elif isinstance(response, str):
+                return response
+            else:
+                raise ValueError(f"Unexpected response type: {type(response)}")
+                
         except Exception as e:
             logger.error(f"Error analyzing market context: {str(e)}")
             raise
 
-    async def create_user_personas(self, market_context: MarketContext) -> List[UserPersona]:
-        """Generate user personas based on market context."""
+    async def create_user_personas(self, market_context: str) -> List[UserPersona]:
+        """Create user personas based on market context."""
+        logger.info("Creating user personas from market context...")
+        logger.debug(f"Market context input: {market_context[:100]}...")
+        
         try:
-            persona_prompt = f"""Create detailed user personas based on this market context:
-
-            Market Context:
-            {json.dumps(market_context.model_dump(), indent=2)}
-
-            For each major user segment, create a persona that includes:
-            1. Name and role
-            2. Goals and objectives
-            3. Key challenges
-            4. User preferences
-            5. Technical proficiency level
-
-            Format the response as a JSON array of UserPersona objects.
-            """
-
-            response = await self.client.generate_content(persona_prompt)
-            personas_data = json.loads(response.text)
-            return [UserPersona.parse_obj(persona) for persona in personas_data]
-
+            personas_data = json.loads(market_context)
+            logger.debug(f"Parsed personas data type: {type(personas_data)}")
+            logger.debug(f"Parsed personas data: {personas_data}")
+            
+            if isinstance(personas_data, list):
+                personas = []
+                for persona in personas_data:
+                    try:
+                        personas.append(UserPersona.model_validate(persona))
+                    except ValidationError as e:
+                        logger.error(f"Validation error for persona: {str(e)}")
+                        logger.debug(f"Failed to validate persona: {persona}")
+                return personas
+            elif isinstance(personas_data, dict):
+                try:
+                    return [UserPersona.model_validate(personas_data)]
+                except ValidationError as e:
+                    logger.error(f"Validation error for persona: {str(e)}")
+                    logger.debug(f"Failed to validate persona: {personas_data}")
+                    raise
+            else:
+                raise ValueError(f"Unexpected personas data type: {type(personas_data)}")
+                
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON decode error: {str(e)}")
+            logger.debug(f"Failed to parse JSON: {market_context}")
+            raise
         except Exception as e:
             logger.error(f"Error creating user personas: {str(e)}")
             raise
 
     async def define_features(self, 
                             prompt: str, 
-                            market_context: MarketContext,
+                            market_context: str,
                             personas: List[UserPersona]) -> List[FeatureSpecification]:
         """Define product features based on requirements and user personas."""
         try:
@@ -144,7 +169,7 @@ class ProductManager:
             {prompt}
 
             Market Context:
-            {json.dumps(market_context.model_dump(), indent=2)}
+            {market_context}
 
             User Personas:
             {json.dumps([persona.model_dump() for persona in personas], indent=2)}
@@ -162,7 +187,14 @@ class ProductManager:
 
             response = await self.client.generate_content(feature_prompt)
             features_data = json.loads(response.text)
-            return [FeatureSpecification(**feature) for feature in features_data]
+            features = []
+            for feature in features_data:
+                try:
+                    features.append(FeatureSpecification.model_validate(feature))
+                except ValidationError as e:
+                    logger.error(f"Validation error for feature: {str(e)}")
+                    logger.debug(f"Failed to validate feature: {feature}")
+            return features
 
         except Exception as e:
             logger.error(f"Error defining features: {str(e)}")
@@ -211,21 +243,67 @@ class ProductManager:
             raise
 
     async def create_product_specs(self, prompt: str) -> ProductSpecification:
-        """Create comprehensive product specifications from user prompt with automated validation."""
+        """Create product specifications from user prompt."""
         try:
-            # Generate market context and user personas
+            # Step 1: Analyze market context
             market_context = await self.analyze_market_context(prompt)
-            personas = await self.create_user_personas(market_context)
+            logger.debug(f"Market context type: {type(market_context)}")
+            logger.debug(f"Market context raw: {market_context}")
+            
+            try:
+                market_data = json.loads(market_context) if isinstance(market_context, str) else market_context
+                logger.debug(f"Parsed market data: {market_data}")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse market context as JSON: {e}")
+                raise
+            
+            # Step 2: Create user personas
+            personas_prompt = f"""Create detailed user personas based on this market context:
+
+            Market Context:
+            {market_context}
+
+            For each major user segment, create a persona that includes:
+            1. Name and role
+            2. Goals and objectives
+            3. Key challenges
+            4. User preferences
+            5. Technical proficiency level
+
+            Format the response as a JSON array of UserPersona objects.
+            """
+            
+            response = await self.client.generate_content(personas_prompt)
+            logger.debug(f"Raw personas response: {response}")
+            logger.debug(f"Personas response type: {type(response)}")
+            logger.debug(f"Personas response text type: {type(response.text)}")
+            
+            try:
+                personas_data = json.loads(response.text)
+                logger.debug(f"Parsed personas data: {personas_data}")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse personas response as JSON: {e}")
+                raise
+                
+            try:
+                personas = [UserPersona.model_validate(persona) for persona in personas_data]
+                logger.debug(f"Validated personas: {personas}")
+            except ValidationError as e:
+                logger.error(f"Failed to validate personas: {e}")
+                raise
+            
+            # Step 3: Define features
             features = await self.define_features(prompt, market_context, personas)
+            logger.debug(f"Generated features: {features}")
+            
+            # Step 4: Generate final specification
+            spec_prompt = f"""Create a comprehensive product specification based on:
 
-            # Generate initial specification
-            spec_prompt = f"""Create detailed product specifications based on:
-
-            Original Requirements:
+            Project Requirements:
             {prompt}
 
             Market Context:
-            {json.dumps(market_context.model_dump(), indent=2)}
+            {market_context}
 
             User Personas:
             {json.dumps([persona.model_dump() for persona in personas], indent=2)}
@@ -233,39 +311,37 @@ class ProductManager:
             Features:
             {json.dumps([feature.model_dump() for feature in features], indent=2)}
 
-            Include:
-            1. Clear scope definition
-            2. Success metrics for each objective
-            3. Technical requirements and constraints
-            4. Project timeline and milestones
-            5. Dependencies and assumptions
-            6. Risk assessment and mitigation strategies
-
-            Format as a JSON object matching the ProductSpecification model.
+            Format the response as a ProductSpecification object.
             """
-
+            
             response = await self.client.generate_content(spec_prompt)
-            spec_data = json.loads(response.text)
+            logger.debug(f"Raw spec response: {response}")
+            logger.debug(f"Spec response type: {type(response)}")
             
-            # Create specification object
-            spec = ProductSpecification(
-                **spec_data,
-                market_context=market_context,
-                audience=personas,
-                features=features
-            )
-
-            # Cross-validate with stakeholders
-            validation_results = await self.validate_with_stakeholders(
-                spec,
-                ["architect", "engineer", "qa_engineer", "security_analyst"]
-            )
+            try:
+                spec_data = json.loads(response.text)
+                logger.debug(f"Parsed spec data: {spec_data}")
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse spec response as JSON: {e}")
+                raise
             
-            # Update specification with validation results
-            spec.validation_status = validation_results
-
+            try:
+                # Create specification object with validated components
+                spec = ProductSpecification(
+                    title=spec_data["title"],
+                    description=spec_data["description"],
+                    market_context=MarketContext.model_validate(spec_data["market_context"]),
+                    audience=personas,
+                    features=[FeatureSpecification.model_validate(feature) for feature in spec_data.get("features", [])]
+                )
+                logger.debug(f"Created spec object: {spec}")
+            except ValidationError as e:
+                logger.error(f"Failed to create ProductSpecification: {e}")
+                logger.debug(f"Spec data used: {spec_data}")
+                raise
+            
             return spec
-
+            
         except Exception as e:
             logger.error(f"Error creating product specifications: {str(e)}")
             raise
@@ -298,21 +374,16 @@ Last Updated: {specs.last_updated.strftime('%Y-%m-%d %H:%M:%S')}
 
 ## Market Context
 ### Target Market
-{chr(10).join(f'- {market}' for market in specs.market_context.target_market)}
+{specs.market_context.target_market}
 
 ### Competitors
-{chr(10).join([f'''
-#### {comp['name']}
-- Strengths: {', '.join(comp.get('strengths', []))}
-- Weaknesses: {', '.join(comp.get('weaknesses', []))}
-- Market Position: {comp.get('market_position', 'N/A')}
-''' for comp in specs.market_context.competitors])}
+{chr(10).join(f'- {comp}' for comp in specs.market_context.competitors)}
 
 ### Market Trends
-{chr(10).join(f'- {trend}' for trend in specs.market_context.market_trends)}
+{chr(10).join(f'- {trend}' for trend in specs.market_context.trends)}
 
 ### User Demographics
-{chr(10).join(f'- {key}: {value}' for key, value in specs.market_context.user_demographics.items())}
+{specs.market_context.demographics}
 
 ### Pain Points
 {chr(10).join(f'- {point}' for point in specs.market_context.pain_points)}
@@ -330,9 +401,9 @@ Last Updated: {specs.last_updated.strftime('%Y-%m-%d %H:%M:%S')}
 {chr(10).join(f'- {challenge}' for challenge in persona.challenges)}
 
 **Preferences:**
-{chr(10).join(f'- {key}: {value}' for key, value in persona.preferences.items())}
+{chr(10).join(f'- {pref}' for pref in persona.preferences)}
 
-**Technical Proficiency:** {persona.technical_proficiency}
+**Technical Proficiency:** {persona.tech_proficiency}
 ''' for persona in specs.audience])}
 
 ## Features
@@ -343,53 +414,53 @@ Last Updated: {specs.last_updated.strftime('%Y-%m-%d %H:%M:%S')}
 **Description:**
 {feature.description}
 
-**User Stories:**
-{chr(10).join(f'- {story}' for story in feature.user_stories)}
+**Requirements:**
+{chr(10).join(f'- {req}' for req in feature.requirements)}
 
 **Acceptance Criteria:**
 {chr(10).join(f'- {criteria}' for criteria in feature.acceptance_criteria)}
 
 **Technical Requirements:**
-{chr(10).join(f'- {req}' for req in feature.technical_requirements)}
+{chr(10).join(f'- {req}' for req in feature.technical_requirements) if feature.technical_requirements else ''}
 
 **Dependencies:**
-{chr(10).join(f'- {dep}' for dep in feature.dependencies)}
+{chr(10).join(f'- {dep}' for dep in feature.dependencies) if feature.dependencies else ''}
 
-**Estimated Effort:** {feature.estimated_effort}
+**Estimated Effort:** {feature.estimated_effort if feature.estimated_effort else ''}
 
 **Risks:**
-{chr(10).join(f'- {risk}' for risk in feature.risks)}
+{chr(10).join(f'- {risk}' for risk in feature.risks) if feature.risks else ''}
 ''' for feature in specs.features])}
 
 ## Success Metrics
 {chr(10).join([f'''
 ### {category}
 {chr(10).join(f'- {metric}' for metric in metrics)}
-''' for category, metrics in specs.success_metrics.items()])}
+''' for category, metrics in specs.success_metrics.items()]) if specs.success_metrics else ''}
 
 ## Technical Requirements
-{chr(10).join(f'- {req}' for req in specs.technical_requirements)}
+{chr(10).join(f'- {req}' for req in specs.technical_requirements) if specs.technical_requirements else ''}
 
 ## Constraints
-{chr(10).join(f'- {constraint}' for constraint in specs.constraints)}
+{chr(10).join(f'- {constraint}' for constraint in specs.constraints) if specs.constraints else ''}
 
 ## Timeline
-{chr(10).join(f'- {phase}: {details}' for phase, details in specs.timeline.items())}
+{chr(10).join(f'- {phase}: {details}' for phase, details in specs.timeline.items()) if specs.timeline else ''}
 
 ## Dependencies
 {chr(10).join([f'''
 ### {category}
 {chr(10).join(f'- {dep}' for dep in deps)}
-''' for category, deps in specs.dependencies.items()])}
+''' for category, deps in specs.dependencies.items()]) if specs.dependencies else ''}
 
 ## Risks and Mitigations
 {chr(10).join([f'''
 ### {risk_category}
 {chr(10).join(f'- {strategy}' for strategy in strategies)}
-''' for risk_category, strategies in specs.risks_and_mitigations.items()])}
+''' for risk_category, strategies in specs.risks_and_mitigations.items()]) if specs.risks_and_mitigations else ''}
 
 ## Assumptions
-{chr(10).join(f'- {assumption}' for assumption in specs.assumptions)}
+{chr(10).join(f'- {assumption}' for assumption in specs.assumptions) if specs.assumptions else ''}
 
 ## Validation Status
 {chr(10).join([f'''

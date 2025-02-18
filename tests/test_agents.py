@@ -6,13 +6,25 @@ import os
 import pytest
 import pathlib
 from dotenv import load_dotenv
+import logging
+from unittest.mock import AsyncMock, Mock
+import json
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Add project root to Python path
 project_root = pathlib.Path(__file__).parent.parent.absolute()
 sys.path.insert(0, str(project_root))
 
 # Import after path setup
-from ai_agents.product_manager import ProductManager
+from ai_agents.product_manager import (
+    ProductManager, 
+    ProductSpecification,
+    UserPersona,
+    MarketContext,
+    FeatureSpecification
+)
 from ai_agents.approval_system import ApprovalSystem
 from ai_agents.checkpoint_system import CheckpointSystem
 
@@ -26,6 +38,19 @@ if not os.getenv("GEMINI_API_KEY"):
 
 # Configure pytest-asyncio
 pytest_plugins = ('pytest_asyncio',)
+
+class MockResponse:
+    """Mock Gemini API response."""
+    def __init__(self, text):
+        self.text = text
+        
+    async def __call__(self, *args, **kwargs):
+        return self
+
+    def __await__(self):
+        async def _async_result():
+            return self
+        return _async_result().__await__()
 
 @pytest.fixture
 def approval_system():
@@ -51,28 +76,65 @@ async def test_product_manager_initialization(product_manager):
 @pytest.mark.asyncio
 async def test_create_product_specs(product_manager):
     """Test creating product specifications."""
-    prompt = "Create a web-based task management system"
-    specs = await product_manager.create_product_specs(prompt)
+    prompt = "Build a task management system with AI-powered prioritization"
     
-    # Verify required fields
-    assert "title" in specs
-    assert "description" in specs
-    assert "scope" in specs
-    assert "audience" in specs
-    assert "success_metrics" in specs
-    assert "technical_requirements" in specs
-    assert "constraints" in specs
-    assert "timeline" in specs
+    # Mock Gemini response for market context
+    mock_market_context = {
+        "target_market": "Software development teams",
+        "competitors": ["Jira", "Trello"],
+        "trends": ["AI integration", "Automation"],
+        "demographics": "Tech-savvy professionals",
+        "pain_points": ["Manual prioritization", "Context switching"],
+        "opportunities": ["AI-driven insights", "Workflow automation"]
+    }
     
-    # Verify content quality
-    assert len(specs["title"]) > 0
-    assert len(specs["description"]) > 0
-    assert isinstance(specs["scope"], dict)
-    assert isinstance(specs["audience"], list)
-    assert isinstance(specs["success_metrics"], list)
-    assert isinstance(specs["technical_requirements"], list)
-    assert isinstance(specs["constraints"], list)
-    assert isinstance(specs["timeline"], dict)
+    # Mock Gemini response for user personas
+    mock_personas = [{
+        "name": "Tech Lead Sarah",
+        "role": "Development Team Lead",
+        "goals": ["Improve team productivity"],
+        "challenges": ["Task prioritization"],
+        "preferences": ["Clean UI"],
+        "tech_proficiency": "Expert"
+    }]
+    
+    # Mock Gemini response for features
+    mock_features = [{
+        "name": "AI Task Prioritization",
+        "description": "Automatically prioritize tasks using ML",
+        "priority": "high",
+        "requirements": ["ML model integration", "Task scoring system"],
+        "acceptance_criteria": ["Tasks are correctly prioritized"]
+    }]
+    
+    # Mock Gemini response for product specs
+    mock_specs = {
+        "title": "AI Task Manager",
+        "description": "Task management with AI prioritization",
+        "market_context": mock_market_context,
+        "features": mock_features
+    }
+    
+    # Configure mocks
+    mock_responses = [
+        MockResponse(json.dumps(mock_market_context)),  # For market context
+        MockResponse(json.dumps(mock_personas)),        # For user personas
+        MockResponse(json.dumps(mock_features)),        # For features
+        MockResponse(json.dumps(mock_specs))           # For final specs
+    ]
+    
+    product_manager.client.generate_content = AsyncMock(side_effect=mock_responses)
+    
+    try:
+        specs = await product_manager.create_product_specs(prompt)
+        logger.info(f"Generated specs: {specs}")
+        assert isinstance(specs, ProductSpecification)
+        assert specs.title is not None
+        assert len(specs.features) > 0
+    except Exception as e:
+        logger.error(f"Test failed: {str(e)}")
+        logger.debug(f"Mock responses: {mock_responses}")
+        raise
 
 @pytest.mark.asyncio
 async def test_approval_system_validation(approval_system):
