@@ -2,6 +2,7 @@ import os
 import pytest
 import sys
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 
 # Add project root to path
 project_root = str(Path(__file__).parent.parent)
@@ -21,14 +22,19 @@ def test_base_agent_initialization():
     agent = BaseAgent()
     assert agent.model == "gemini-2.0-flash"
 
-def test_architect_initialization():
+@patch('google.generativeai.GenerativeModel')
+def test_architect_initialization(mock_model):
     """Test that Architect can be initialized with default model."""
+    mock_model.return_value = MagicMock()
     architect = Architect()
     assert architect.model == "gemini-2.0-flash"
     assert hasattr(architect, 'client'), "Architect should have a client attribute"
 
-def test_product_manager_initialization():
+@patch('google.generativeai.GenerativeModel')
+def test_product_manager_initialization(mock_model):
     """Test that ProductManager can be initialized with default model."""
+    mock_model.return_value = MagicMock()
+    mock_model.return_value.generate_content.return_value = MagicMock()
     pm = ProductManager()
     assert pm.model == "gemini-2.0-flash"
     assert hasattr(pm, 'client'), "ProductManager should have a client attribute"
