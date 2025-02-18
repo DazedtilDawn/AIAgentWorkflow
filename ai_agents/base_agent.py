@@ -1,7 +1,9 @@
+import logging
 import os
 from pathlib import Path
 from dotenv import load_dotenv
 import google.generativeai as genai
+import logging
 from functools import wraps
 from typing import Dict, Any, Optional
 from loguru import logger
