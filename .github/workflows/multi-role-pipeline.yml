@@ -126,8 +126,17 @@ jobs:
       - name: Run planning and implementation
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
-          python -m pytest tests/test_planning.py -v
+          # Clear pytest cache
+          rm -rf .pytest_cache
+          python -m pytest --cache-clear
+          
+          # Show test collection and available methods
+          python -m pytest tests/test_planning.py --collect-only -v
+          
+          # Run tests with full debug output
+          python -m pytest tests/test_planning.py -v --log-cli-level=DEBUG --tb=long
           python -m pytest tests/test_implementation.py -v
 
   quality_assurance:
