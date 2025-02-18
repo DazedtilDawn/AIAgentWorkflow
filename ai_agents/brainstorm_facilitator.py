@@ -1,101 +1,230 @@
 import click
 from loguru import logger
-from typing import List, Dict
-from .base_agent import BaseAgent
+from typing import List, Dict, Any, Optional
+import google.generativeai as genai
+from pydantic import BaseModel
+import json
+import os
+from dotenv import load_dotenv
+import asyncio
+from datetime import datetime
+from pathlib import Path
+from .parallel_ideation import ParallelIdeationSystem, IdeationContext
 
-class BrainstormFacilitator(BaseAgent):
-    def __init__(self, model: str = "gpt-4-turbo-preview"):
-        super().__init__(model)
+# Load environment variables
+load_dotenv()
+
+class SolutionIdea(BaseModel):
+    title: str
+    description: str
+    key_features: List[str]
+    technical_approach: List[str]
+    pros: List[str]
+    cons: List[str]
+    score: float
+    contributing_specializations: Optional[List[str]] = None
+    source_fragments: Optional[List[str]] = None
+    synergy_score: Optional[float] = None
+
+class BrainstormOutcome(BaseModel):
+    ideas: List[SolutionIdea]
+    consolidated_recommendation: str
+    synergy_insights: Optional[List[str]] = None
+    timestamp: datetime = datetime.now()
+    session_id: str = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+class BrainstormFacilitator:
+    def __init__(self, model: str = "gemini-2.0-flash", num_agents: int = 3):
+        """Initialize the Brainstorm Facilitator with parallel ideation system."""
+        self.model = model
+        self.parallel_ideation = ParallelIdeationSystem(model, num_agents)
+        
+        # Configure Gemini for main facilitator
+        api_key = os.getenv("VITE_GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("VITE_GEMINI_API_KEY not found in environment variables")
+        genai.configure(api_key=api_key)
+        self.client = genai.GenerativeModel(self.model)
     
-    async def generate_ideas(self, product_specs: str, num_ideas: int = 3) -> List[Dict]:
-        """Generate multiple solution ideas based on product specifications."""
-        system_message = """You are a creative Brainstorm Facilitator leading a team of experts.
-        Generate innovative, detailed, and feasible solutions that meet the product specifications.
-        Each solution should be unique and include implementation considerations."""
-        
-        prompt = f"""Based on the following product specifications:
-
-        {product_specs}
-
-        Generate {num_ideas} distinct solution approaches. For each solution, provide:
-        1. High-level approach
-        2. Technical architecture
-        3. Key advantages
-        4. Potential challenges
-        5. Implementation timeline
-        6. Resource requirements
-        """
-        
+    async def generate_ideas(self, 
+                           product_specs: str, 
+                           market_context: Optional[str] = None,
+                           technical_constraints: Optional[List[str]] = None,
+                           innovation_targets: Optional[List[str]] = None) -> BrainstormOutcome:
+        """Generate multiple solution ideas using parallel ideation."""
         try:
-            ideas = await self.get_completion(prompt, system_message, temperature=0.8)
-            return self._parse_ideas(ideas)
+            # Create ideation context
+            context = IdeationContext(
+                product_specs=product_specs,
+                market_context=market_context,
+                technical_constraints=technical_constraints,
+                innovation_targets=innovation_targets
+            )
+            
+            # Run parallel ideation
+            consolidated_ideas = await self.parallel_ideation.run_parallel_ideation(context)
+            
+            # Generate final recommendation and insights
+            recommendation_prompt = f"""Review these consolidated solution ideas and provide a final recommendation:
+            {json.dumps(consolidated_ideas, indent=2)}
+            
+            Product Context:
+            {product_specs}
+            
+            Create a comprehensive recommendation that:
+            1. Highlights the most promising solution(s)
+            2. Explains key synergies between different specializations
+            3. Addresses potential challenges and mitigation strategies
+            
+            Format as JSON with fields:
+            - recommendation: string
+            - synergy_insights: list of strings
+            """
+            
+            response = await self.client.generate_content(recommendation_prompt)
+            recommendation_data = json.loads(response.text)
+            
+            # Convert consolidated ideas to SolutionIdea objects
+            solution_ideas = []
+            for idea in consolidated_ideas:
+                # Extract pros and cons from description
+                pros_cons_prompt = f"""Analyze this solution idea and extract key pros and cons:
+                Title: {idea['title']}
+                Description: {idea['description']}
+                Key Features: {', '.join(idea['key_features'])}
+                Technical Approach: {', '.join(idea['technical_approach'])}
+                
+                Return as JSON with fields:
+                - pros: list of strings
+                - cons: list of strings
+                """
+                
+                pros_cons_response = await self.client.generate_content(pros_cons_prompt)
+                pros_cons_data = json.loads(pros_cons_response.text)
+                
+                solution_ideas.append(SolutionIdea(
+                    title=idea["title"],
+                    description=idea["description"],
+                    key_features=idea["key_features"],
+                    technical_approach=idea["technical_approach"],
+                    pros=pros_cons_data["pros"],
+                    cons=pros_cons_data["cons"],
+                    score=idea.get("final_score", 0.0),
+                    contributing_specializations=idea.get("contributing_specializations", []),
+                    source_fragments=idea.get("source_fragments", []),
+                    synergy_score=idea.get("synergy_score", 0.0)
+                ))
+            
+            # Create and return final outcome
+            return BrainstormOutcome(
+                ideas=solution_ideas,
+                consolidated_recommendation=recommendation_data["recommendation"],
+                synergy_insights=recommendation_data["synergy_insights"],
+                session_id=context.session_id
+            )
+            
         except Exception as e:
             logger.error(f"Error generating ideas: {str(e)}")
             raise
     
-    async def evaluate_ideas(self, ideas: List[Dict]) -> Dict:
-        """Evaluate and rank the generated ideas."""
-        system_message = """You are an expert evaluator tasked with analyzing and ranking 
-        solution proposals based on feasibility, innovation, and alignment with requirements."""
-        
-        prompt = f"""Evaluate the following solution proposals:
-
-        {ideas}
-
-        For each solution:
-        1. Score (1-10) on: Feasibility, Innovation, Alignment, Cost-effectiveness
-        2. Identify key strengths and weaknesses
-        3. Provide implementation recommendations
-        
-        Finally, rank the solutions and recommend the best approach.
-        """
-        
+    def save_outcome(self, outcome: BrainstormOutcome, output_file: str):
+        """Save the brainstorm outcome to a markdown file."""
         try:
-            evaluation = await self.get_completion(prompt, system_message, temperature=0.4)
-            return self._parse_evaluation(evaluation)
+            output_path = Path(output_file)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            markdown_content = f"""# Brainstorm Session Outcome
+Session ID: {outcome.session_id}
+Timestamp: {outcome.timestamp.strftime('%Y-%m-%d %H:%M:%S')}
+
+## Consolidated Recommendation
+{outcome.consolidated_recommendation}
+
+## Synergy Insights
+{chr(10).join(f'- {insight}' for insight in (outcome.synergy_insights or []))}
+
+## Solution Ideas
+
+"""
+            # Add each solution idea
+            for i, idea in enumerate(outcome.ideas, 1):
+                markdown_content += f"""### {i}. {idea.title}
+**Score: {idea.score:.2f}** | **Synergy Score: {idea.synergy_score or 0:.2f}**
+
+{idea.description}
+
+#### Key Features
+{chr(10).join(f'- {feature}' for feature in idea.key_features)}
+
+#### Technical Approach
+{chr(10).join(f'- {step}' for step in idea.technical_approach)}
+
+#### Pros
+{chr(10).join(f'- {pro}' for pro in idea.pros)}
+
+#### Cons
+{chr(10).join(f'- {con}' for con in idea.cons)}
+
+#### Contributing Specializations
+{chr(10).join(f'- {spec}' for spec in (idea.contributing_specializations or []))}
+
+---
+"""
+            
+            # Write to file
+            with output_path.open('w', encoding='utf-8') as f:
+                f.write(markdown_content)
+            
+            logger.info(f"Brainstorm outcome saved to {output_file}")
+            
         except Exception as e:
-            logger.error(f"Error evaluating ideas: {str(e)}")
+            logger.error(f"Error saving outcome: {str(e)}")
             raise
-    
-    def _parse_ideas(self, raw_ideas: str) -> List[Dict]:
-        """Parse the raw ideas into structured format."""
-        # Implementation would parse the text into structured data
-        return [{"content": raw_ideas}]  # Simplified for example
-    
-    def _parse_evaluation(self, raw_evaluation: str) -> Dict:
-        """Parse the raw evaluation into structured format."""
-        # Implementation would parse the text into structured data
-        return {"content": raw_evaluation}  # Simplified for example
 
 @click.command()
-@click.option('--input', required=True, help='Path to the product specifications file')
-@click.option('--output', required=True, help='Path to save the brainstorm outcome')
-@click.option('--num-ideas', default=3, help='Number of ideas to generate')
-def main(input: str, output: str, num_ideas: int):
-    """CLI interface for the Brainstorm Facilitator agent."""
+@click.argument('specs_file', type=click.Path(exists=True))
+@click.argument('output', type=click.Path())
+@click.option('--num-agents', default=3, help='Number of parallel ideation agents')
+@click.option('--market-context', type=str, help='Optional market context file')
+@click.option('--constraints-file', type=click.Path(exists=True), help='Optional technical constraints file')
+@click.option('--targets-file', type=click.Path(exists=True), help='Optional innovation targets file')
+async def main(specs_file: str, 
+               output: str, 
+               num_agents: int,
+               market_context: Optional[str] = None,
+               constraints_file: Optional[str] = None,
+               targets_file: Optional[str] = None):
+    """Generate solution ideas using the Brainstorm Facilitator agent."""
     try:
-        facilitator = BrainstormFacilitator()
+        # Read input files
+        with open(specs_file, 'r') as f:
+            product_specs = f.read()
         
-        if not facilitator.validate_file_exists(input):
-            raise FileNotFoundError(f"Product specifications file not found: {input}")
+        technical_constraints = None
+        if constraints_file:
+            with open(constraints_file, 'r') as f:
+                technical_constraints = f.read().splitlines()
         
-        specs = facilitator.load_file(input)
-        ideas = facilitator.generate_ideas(specs, num_ideas)
-        evaluation = facilitator.evaluate_ideas(ideas)
+        innovation_targets = None
+        if targets_file:
+            with open(targets_file, 'r') as f:
+                innovation_targets = f.read().splitlines()
         
-        # Combine ideas and evaluation into final outcome
-        outcome = {
-            "ideas": ideas,
-            "evaluation": evaluation,
-            "recommended_approach": evaluation.get("recommended_solution")
-        }
+        # Initialize facilitator and generate ideas
+        facilitator = BrainstormFacilitator(num_agents=num_agents)
+        outcome = await facilitator.generate_ideas(
+            product_specs=product_specs,
+            market_context=market_context,
+            technical_constraints=technical_constraints,
+            innovation_targets=innovation_targets
+        )
         
-        facilitator.save_file(output, str(outcome))
-        logger.info(f"Successfully generated brainstorm outcome: {output}")
+        # Save outcome
+        facilitator.save_outcome(outcome, output)
         
     except Exception as e:
-        logger.error(f"Error in brainstorm facilitator execution: {str(e)}")
+        logger.error(f"Error in brainstorm process: {str(e)}")
         raise
 
-if __name__ == "__main__":
-    main()
+if __name__ == '__main__':
+    asyncio.run(main())

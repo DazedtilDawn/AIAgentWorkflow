@@ -1,7 +1,9 @@
 import click
 import os
+import json
+import re
 from loguru import logger
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from .base_agent import BaseAgent
 
 class RefactorAnalyst(BaseAgent):
@@ -117,6 +119,142 @@ class RefactorAnalyst(BaseAgent):
             logger.error(f"Error updating cursor rules: {str(e)}")
             raise
     
+    async def analyze_dependencies(self,
+                                 code_files: Dict[str, str],
+                                 architecture: Optional[Dict] = None) -> Dict[str, Any]:
+        """Analyze dependencies between components and identify optimization opportunities."""
+        system_message = """You are a Dependency Analysis Expert focusing on component relationships,
+        coupling patterns, and architectural dependencies."""
+        
+        files_content = "\n".join(f"File: {path}\n{content}\n" 
+                                 for path, content in code_files.items())
+        arch_context = f"Architecture:\n{architecture}\n" if architecture else ""
+        
+        prompt = f"""{arch_context}
+        Analyze dependencies in the following codebase:
+
+        {files_content}
+
+        Focus on:
+        1. Component Coupling
+           - Identify tight coupling
+           - Suggest decoupling strategies
+           - Recommend interface improvements
+        2. Dependency Patterns
+           - Circular dependencies
+           - Dependency injection opportunities
+           - Service locator patterns
+        3. Architectural Alignment
+           - Layer violations
+           - Boundary crossings
+           - Integration patterns
+        4. Optimization Opportunities
+           - Shared dependencies
+           - Duplicate functionality
+           - Dependency consolidation
+        """
+        
+        try:
+            analysis = await self.get_completion(prompt, system_message, temperature=0.7)
+            return self._parse_dependency_analysis(analysis)
+        except Exception as e:
+            logger.error(f"Error analyzing dependencies: {str(e)}")
+            raise
+
+    async def assess_refactor_impact(self,
+                                   suggestions: List[Dict],
+                                   codebase_stats: Dict[str, Any]) -> List[Dict]:
+        """Assess the impact and risk of proposed refactoring changes."""
+        system_message = """You are a Refactoring Impact Analyst specializing in
+        evaluating the effects of code changes on system stability and performance."""
+        
+        prompt = f"""
+        Analyze the impact of proposed refactoring:
+
+        Suggestions:
+        {json.dumps(suggestions, indent=2)}
+
+        Codebase Statistics:
+        {json.dumps(codebase_stats, indent=2)}
+
+        For each suggestion, evaluate:
+        1. Scope of Impact
+           - Affected components
+           - Downstream dependencies
+           - Test coverage needs
+        2. Risk Assessment
+           - Technical complexity
+           - Migration challenges
+           - Potential regressions
+        3. Resource Requirements
+           - Development effort
+           - Testing effort
+           - Deployment complexity
+        4. Business Impact
+           - Performance gains
+           - Maintenance benefits
+           - Technical debt reduction
+        """
+        
+        try:
+            assessment = await self.get_completion(prompt, system_message, temperature=0.6)
+            return self._parse_impact_assessment(assessment)
+        except Exception as e:
+            logger.error(f"Error assessing refactor impact: {str(e)}")
+            raise
+
+    async def generate_automated_refactorings(self,
+                                            code: str,
+                                            analysis: Dict[str, Any]) -> List[Dict]:
+        """Generate automated refactoring suggestions with code examples."""
+        system_message = """You are an Automated Refactoring Expert generating
+        specific code changes to improve system quality."""
+        
+        prompt = f"""
+        Generate automated refactoring suggestions for:
+
+        Code:
+        {code}
+
+        Analysis:
+        {json.dumps(analysis, indent=2)}
+
+        For each suggestion:
+        1. Provide specific code changes
+        2. Include before/after examples
+        3. Explain the transformation
+        4. List required test updates
+        5. Specify validation steps
+
+        Focus on:
+        1. Design Pattern Application
+        2. SOLID Principle Alignment
+        3. Performance Optimization
+        4. Error Handling
+        5. Resource Management
+        """
+        
+        try:
+            suggestions = await self.get_completion(prompt, system_message, temperature=0.6)
+            return self._parse_automated_suggestions(suggestions)
+        except Exception as e:
+            logger.error(f"Error generating automated refactorings: {str(e)}")
+            raise
+
+    async def analyze_code(self, implementation: str, monitoring: str) -> str:
+        """Wrapper method for integration test compatibility."""
+        try:
+            # Generate refactoring suggestions
+            suggestions = await self.analyze_codebase({
+                'implementation': implementation,
+                'monitoring_data': monitoring
+            })
+            return suggestions.to_markdown()
+            
+        except Exception as e:
+            logger.error(f"Error in analyze_code: {str(e)}")
+            raise
+
     def _parse_analysis(self, raw_analysis: str) -> Dict:
         """Parse the raw analysis into structured format."""
         # Implementation would parse the text into structured data
@@ -132,6 +270,193 @@ class RefactorAnalyst(BaseAgent):
         # Implementation would format the rules appropriately
         return raw_rules  # Simplified for example
     
+    def _parse_dependency_analysis(self, raw_analysis: str) -> Dict[str, Any]:
+        """Parse dependency analysis into structured format."""
+        try:
+            # Extract sections using regex
+            sections = {
+                "coupling": re.findall(r"Component Coupling:\n(.*?)(?=\n\n|$)", 
+                                     raw_analysis, re.DOTALL),
+                "patterns": re.findall(r"Dependency Patterns:\n(.*?)(?=\n\n|$)", 
+                                     raw_analysis, re.DOTALL),
+                "architecture": re.findall(r"Architectural Alignment:\n(.*?)(?=\n\n|$)", 
+                                         raw_analysis, re.DOTALL),
+                "optimization": re.findall(r"Optimization Opportunities:\n(.*?)(?=\n\n|$)", 
+                                         raw_analysis, re.DOTALL)
+            }
+            
+            # Structure the analysis
+            return {
+                "component_coupling": {
+                    "issues": self._extract_items(sections["coupling"], r"- (.*?)(?=\n|$)"),
+                    "recommendations": self._extract_items(sections["coupling"], 
+                                                        r"Recommendation: (.*?)(?=\n|$)")
+                },
+                "dependency_patterns": {
+                    "identified_patterns": self._extract_items(sections["patterns"], 
+                                                            r"- (.*?)(?=\n|$)"),
+                    "improvements": self._extract_items(sections["patterns"], 
+                                                     r"Improvement: (.*?)(?=\n|$)")
+                },
+                "architectural_alignment": {
+                    "violations": self._extract_items(sections["architecture"], 
+                                                   r"- (.*?)(?=\n|$)"),
+                    "solutions": self._extract_items(sections["architecture"], 
+                                                  r"Solution: (.*?)(?=\n|$)")
+                },
+                "optimization_opportunities": {
+                    "areas": self._extract_items(sections["optimization"], 
+                                              r"- (.*?)(?=\n|$)"),
+                    "suggestions": self._extract_items(sections["optimization"], 
+                                                    r"Suggestion: (.*?)(?=\n|$)")
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error parsing dependency analysis: {str(e)}")
+            raise
+
+    def _parse_impact_assessment(self, raw_assessment: str) -> List[Dict]:
+        """Parse impact assessment into structured format."""
+        try:
+            # Extract individual assessments
+            assessments = re.split(r"\n(?=Suggestion \d+:)", raw_assessment)
+            
+            parsed = []
+            for assessment in assessments:
+                if not assessment.strip():
+                    continue
+                    
+                # Extract sections
+                scope = re.search(r"Scope of Impact:(.*?)(?=\n\n|$)", 
+                                assessment, re.DOTALL)
+                risk = re.search(r"Risk Assessment:(.*?)(?=\n\n|$)", 
+                               assessment, re.DOTALL)
+                resources = re.search(r"Resource Requirements:(.*?)(?=\n\n|$)", 
+                                    assessment, re.DOTALL)
+                impact = re.search(r"Business Impact:(.*?)(?=\n\n|$)", 
+                                 assessment, re.DOTALL)
+                
+                parsed.append({
+                    "scope": {
+                        "affected_components": self._extract_items(scope.group(1), 
+                                                               r"- (.*?)(?=\n|$)"),
+                        "dependencies": self._extract_items(scope.group(1), 
+                                                        r"Dependencies: (.*?)(?=\n|$)"),
+                        "test_coverage": self._extract_items(scope.group(1), 
+                                                         r"Testing: (.*?)(?=\n|$)")
+                    } if scope else {},
+                    "risk": {
+                        "complexity": self._extract_items(risk.group(1), 
+                                                      r"Complexity: (.*?)(?=\n|$)"),
+                        "challenges": self._extract_items(risk.group(1), 
+                                                      r"Challenges: (.*?)(?=\n|$)"),
+                        "regressions": self._extract_items(risk.group(1), 
+                                                       r"Regressions: (.*?)(?=\n|$)")
+                    } if risk else {},
+                    "resources": {
+                        "development": self._extract_items(resources.group(1), 
+                                                       r"Development: (.*?)(?=\n|$)"),
+                        "testing": self._extract_items(resources.group(1), 
+                                                   r"Testing: (.*?)(?=\n|$)"),
+                        "deployment": self._extract_items(resources.group(1), 
+                                                      r"Deployment: (.*?)(?=\n|$)")
+                    } if resources else {},
+                    "business_impact": {
+                        "performance": self._extract_items(impact.group(1), 
+                                                       r"Performance: (.*?)(?=\n|$)"),
+                        "maintenance": self._extract_items(impact.group(1), 
+                                                       r"Maintenance: (.*?)(?=\n|$)"),
+                        "tech_debt": self._extract_items(impact.group(1), 
+                                                     r"Tech Debt: (.*?)(?=\n|$)")
+                    } if impact else {}
+                })
+            
+            return parsed
+            
+        except Exception as e:
+            logger.error(f"Error parsing impact assessment: {str(e)}")
+            raise
+
+    def _parse_automated_suggestions(self, raw_suggestions: str) -> List[Dict]:
+        """Parse automated refactoring suggestions into structured format."""
+        try:
+            # Extract individual suggestions
+            suggestions = re.split(r"\n(?=Suggestion \d+:)", raw_suggestions)
+            
+            parsed = []
+            for suggestion in suggestions:
+                if not suggestion.strip():
+                    continue
+                    
+                # Extract sections
+                changes = re.search(r"Code Changes:(.*?)(?=\n\n|$)", 
+                                  suggestion, re.DOTALL)
+                examples = re.search(r"Examples:(.*?)(?=\n\n|$)", 
+                                   suggestion, re.DOTALL)
+                explanation = re.search(r"Explanation:(.*?)(?=\n\n|$)", 
+                                      suggestion, re.DOTALL)
+                testing = re.search(r"Testing:(.*?)(?=\n\n|$)", 
+                                  suggestion, re.DOTALL)
+                
+                parsed.append({
+                    "changes": self._extract_code_changes(changes.group(1)) if changes else [],
+                    "examples": {
+                        "before": self._extract_code_block(examples.group(1), "Before:"),
+                        "after": self._extract_code_block(examples.group(1), "After:")
+                    } if examples else {},
+                    "explanation": explanation.group(1).strip() if explanation else "",
+                    "testing": {
+                        "updates": self._extract_items(testing.group(1), 
+                                                   r"- (.*?)(?=\n|$)"),
+                        "validation": self._extract_items(testing.group(1), 
+                                                      r"Validation: (.*?)(?=\n|$)")
+                    } if testing else {}
+                })
+            
+            return parsed
+            
+        except Exception as e:
+            logger.error(f"Error parsing automated suggestions: {str(e)}")
+            raise
+
+    def _extract_items(self, text: str, pattern: str) -> List[str]:
+        """Extract items matching a pattern from text."""
+        if not text:
+            return []
+        items = re.findall(pattern, text)
+        return [item.strip() for item in items if item.strip()]
+
+    def _extract_code_block(self, text: str, marker: str) -> str:
+        """Extract a code block following a marker."""
+        if not text:
+            return ""
+        match = re.search(f"{marker}\n```.*?\n(.*?)```", text, re.DOTALL)
+        return match.group(1).strip() if match else ""
+
+    def _extract_code_changes(self, text: str) -> List[Dict[str, str]]:
+        """Extract structured code changes from text."""
+        if not text:
+            return []
+        
+        changes = []
+        current_change = {}
+        
+        lines = text.strip().split("\n")
+        for line in lines:
+            if line.startswith("File:"):
+                if current_change:
+                    changes.append(current_change)
+                current_change = {"file": line[5:].strip()}
+            elif line.startswith("Line:"):
+                current_change["line"] = line[5:].strip()
+            elif line.startswith("Change:"):
+                current_change["change"] = line[7:].strip()
+        
+        if current_change:
+            changes.append(current_change)
+            
+        return changes
+
     def _generate_refactor_report(self,
                                 analysis: Dict,
                                 suggestions: List[Dict],

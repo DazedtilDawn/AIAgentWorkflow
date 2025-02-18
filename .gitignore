@@ -24,6 +24,7 @@ wheels/
 venv/
 env/
 ENV/
+.venv/
 
 # IDEs
 .idea/
@@ -32,11 +33,9 @@ ENV/
 *.swo
 
 # Environment variables
-.env
-.env.local
+
 
 # Generated files
-docs/*.md
 src/main_app/
 
 # Logs
@@ -46,6 +45,7 @@ logs/
 # Coverage
 .coverage
 htmlcov/
+.pytest_cache/
 
 # AWS
 .aws/
