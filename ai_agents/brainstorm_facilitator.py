@@ -29,9 +29,8 @@ class SolutionIdea(BaseModel):
 class BrainstormOutcome(BaseModel):
     ideas: List[SolutionIdea]
     consolidated_recommendation: str
-    synergy_insights: Optional[List[str]] = None
     timestamp: datetime = datetime.now()
-    session_id: str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    version: str = "3.2.0"
 
 class BrainstormFacilitator:
     def __init__(self, model: str = "gemini-2.0-flash", num_agents: int = 3):
@@ -40,9 +39,9 @@ class BrainstormFacilitator:
         self.parallel_ideation = ParallelIdeationSystem(model, num_agents)
         
         # Configure Gemini for main facilitator
-        api_key = os.getenv("VITE_GEMINI_API_KEY")
+        api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            raise ValueError("VITE_GEMINI_API_KEY not found in environment variables")
+            raise ValueError("GEMINI_API_KEY not found in environment variables")
         genai.configure(api_key=api_key)
         self.client = genai.GenerativeModel(self.model)
     
@@ -61,170 +60,126 @@ class BrainstormFacilitator:
                 innovation_targets=innovation_targets
             )
             
-            # Run parallel ideation
-            consolidated_ideas = await self.parallel_ideation.run_parallel_ideation(context)
+            # Generate ideas in parallel
+            ideas = await self.parallel_ideation.generate_ideas(context)
             
-            # Generate final recommendation and insights
-            recommendation_prompt = f"""Review these consolidated solution ideas and provide a final recommendation:
-            {json.dumps(consolidated_ideas, indent=2)}
+            # Consolidate recommendations
+            consolidation_prompt = f"""
+            You are a strategic innovation consultant tasked with consolidating multiple solution ideas into a final recommendation.
+            Review the following solution ideas and provide a consolidated recommendation that captures the best aspects of each:
+
+            {json.dumps([idea.dict() for idea in ideas], indent=2)}
             
-            Product Context:
-            {product_specs}
+            Focus on:
+            1. Key synergies between ideas
+            2. Most promising technical approaches
+            3. Highest-value features
+            4. Risk mitigation strategies
             
-            Create a comprehensive recommendation that:
-            1. Highlights the most promising solution(s)
-            2. Explains key synergies between different specializations
-            3. Addresses potential challenges and mitigation strategies
-            
-            Format as JSON with fields:
-            - recommendation: string
-            - synergy_insights: list of strings
+            Provide a clear, actionable recommendation in 2-3 paragraphs.
             """
             
-            response = await self.client.generate_content(recommendation_prompt)
-            recommendation_data = json.loads(response.text)
+            response = self.client.generate_content(consolidation_prompt)
+            consolidated_recommendation = response.text
             
-            # Convert consolidated ideas to SolutionIdea objects
-            solution_ideas = []
-            for idea in consolidated_ideas:
-                # Extract pros and cons from description
-                pros_cons_prompt = f"""Analyze this solution idea and extract key pros and cons:
-                Title: {idea['title']}
-                Description: {idea['description']}
-                Key Features: {', '.join(idea['key_features'])}
-                Technical Approach: {', '.join(idea['technical_approach'])}
-                
-                Return as JSON with fields:
-                - pros: list of strings
-                - cons: list of strings
-                """
-                
-                pros_cons_response = await self.client.generate_content(pros_cons_prompt)
-                pros_cons_data = json.loads(pros_cons_response.text)
-                
-                solution_ideas.append(SolutionIdea(
-                    title=idea["title"],
-                    description=idea["description"],
-                    key_features=idea["key_features"],
-                    technical_approach=idea["technical_approach"],
-                    pros=pros_cons_data["pros"],
-                    cons=pros_cons_data["cons"],
-                    score=idea.get("final_score", 0.0),
-                    contributing_specializations=idea.get("contributing_specializations", []),
-                    source_fragments=idea.get("source_fragments", []),
-                    synergy_score=idea.get("synergy_score", 0.0)
-                ))
-            
-            # Create and return final outcome
-            return BrainstormOutcome(
-                ideas=solution_ideas,
-                consolidated_recommendation=recommendation_data["recommendation"],
-                synergy_insights=recommendation_data["synergy_insights"],
-                session_id=context.session_id
+            # Create final outcome
+            outcome = BrainstormOutcome(
+                ideas=ideas,
+                consolidated_recommendation=consolidated_recommendation
             )
+            
+            return outcome
             
         except Exception as e:
             logger.error(f"Error generating ideas: {str(e)}")
             raise
     
-    def save_outcome(self, outcome: BrainstormOutcome, output_file: str):
+    def save_outcome(self, outcome: BrainstormOutcome, output_file: str) -> None:
         """Save the brainstorm outcome to a markdown file."""
         try:
-            output_path = Path(output_file)
-            output_path.parent.mkdir(parents=True, exist_ok=True)
+            # Create output directory if it doesn't exist
+            output_dir = os.path.dirname(output_file)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
             
-            markdown_content = f"""# Brainstorm Session Outcome
-Session ID: {outcome.session_id}
-Timestamp: {outcome.timestamp.strftime('%Y-%m-%d %H:%M:%S')}
+            # Format output as markdown
+            markdown = f"""# Brainstorm Outcome
+Version: {outcome.version}
+Generated: {outcome.timestamp.isoformat()}
 
 ## Consolidated Recommendation
 {outcome.consolidated_recommendation}
 
-## Synergy Insights
-{chr(10).join(f'- {insight}' for insight in (outcome.synergy_insights or []))}
-
 ## Solution Ideas
 
 """
-            # Add each solution idea
+            # Add each idea
             for i, idea in enumerate(outcome.ideas, 1):
-                markdown_content += f"""### {i}. {idea.title}
-**Score: {idea.score:.2f}** | **Synergy Score: {idea.synergy_score or 0:.2f}**
-
+                markdown += f"""### {i}. {idea.title}
 {idea.description}
 
-#### Key Features
-{chr(10).join(f'- {feature}' for feature in idea.key_features)}
+**Key Features:**
+{chr(10).join([f"- {feature}" for feature in idea.key_features])}
 
-#### Technical Approach
-{chr(10).join(f'- {step}' for step in idea.technical_approach)}
+**Technical Approach:**
+{chr(10).join([f"- {approach}" for approach in idea.technical_approach])}
 
-#### Pros
-{chr(10).join(f'- {pro}' for pro in idea.pros)}
+**Pros:**
+{chr(10).join([f"- {pro}" for pro in idea.pros])}
 
-#### Cons
-{chr(10).join(f'- {con}' for con in idea.cons)}
+**Cons:**
+{chr(10).join([f"- {con}" for con in idea.cons])}
 
-#### Contributing Specializations
-{chr(10).join(f'- {spec}' for spec in (idea.contributing_specializations or []))}
-
----
+Score: {idea.score}
 """
+                if idea.contributing_specializations:
+                    markdown += f"\nContributing Specializations: {', '.join(idea.contributing_specializations)}"
+                if idea.synergy_score:
+                    markdown += f"\nSynergy Score: {idea.synergy_score}"
+                markdown += "\n\n"
             
-            # Write to file
-            with output_path.open('w', encoding='utf-8') as f:
-                f.write(markdown_content)
-            
-            logger.info(f"Brainstorm outcome saved to {output_file}")
+            # Save to file
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(markdown)
+                
+            logger.info(f"Saved brainstorm outcome to {output_file}")
             
         except Exception as e:
             logger.error(f"Error saving outcome: {str(e)}")
             raise
 
-@click.command()
-@click.argument('specs_file', type=click.Path(exists=True))
-@click.argument('output', type=click.Path())
-@click.option('--num-agents', default=3, help='Number of parallel ideation agents')
-@click.option('--market-context', type=str, help='Optional market context file')
-@click.option('--constraints-file', type=click.Path(exists=True), help='Optional technical constraints file')
-@click.option('--targets-file', type=click.Path(exists=True), help='Optional innovation targets file')
-async def main(specs_file: str, 
-               output: str, 
-               num_agents: int,
-               market_context: Optional[str] = None,
-               constraints_file: Optional[str] = None,
-               targets_file: Optional[str] = None):
-    """Generate solution ideas using the Brainstorm Facilitator agent."""
+@click.group()
+def cli():
+    """Brainstorm Facilitator CLI"""
+    pass
+
+@cli.command()
+def generate():
+    """Generate brainstorm ideas and save outcome."""
     try:
-        # Read input files
-        with open(specs_file, 'r') as f:
-            product_specs = f.read()
+        # Create artifacts directory
+        artifacts_dir = Path("artifacts")
+        artifacts_dir.mkdir(exist_ok=True)
         
-        technical_constraints = None
-        if constraints_file:
-            with open(constraints_file, 'r') as f:
-                technical_constraints = f.read().splitlines()
+        # Initialize facilitator
+        facilitator = BrainstormFacilitator()
         
-        innovation_targets = None
-        if targets_file:
-            with open(targets_file, 'r') as f:
-                innovation_targets = f.read().splitlines()
+        # Read product specs if available
+        specs_file = artifacts_dir / "PRODUCT_SPECS.md"
+        product_specs = specs_file.read_text() if specs_file.exists() else "No product specs available"
         
-        # Initialize facilitator and generate ideas
-        facilitator = BrainstormFacilitator(num_agents=num_agents)
-        outcome = await facilitator.generate_ideas(
-            product_specs=product_specs,
-            market_context=market_context,
-            technical_constraints=technical_constraints,
-            innovation_targets=innovation_targets
-        )
+        # Generate ideas
+        outcome = asyncio.run(facilitator.generate_ideas(product_specs))
         
         # Save outcome
-        facilitator.save_outcome(outcome, output)
+        output_file = artifacts_dir / "BRAINSTORM_OUTCOME.md"
+        facilitator.save_outcome(outcome, str(output_file))
+        
+        logger.info("Successfully generated brainstorm outcome")
         
     except Exception as e:
-        logger.error(f"Error in brainstorm process: {str(e)}")
+        logger.error(f"Error in generate command: {str(e)}")
         raise
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    cli()
