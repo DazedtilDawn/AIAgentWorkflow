@@ -30,6 +30,7 @@ class BaseAgent:
     def __init__(self, model: str = "gemini-2.0-flash"):
         """Initialize the base agent with Gemini configuration."""
         self.model = model
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
         self._validate_and_configure()
         self.client = genai.GenerativeModel(model)
         
@@ -42,7 +43,6 @@ class BaseAgent:
             raise ValueError("GEMINI_API_KEY environment variable is not set")
             
         try:
-            genai.configure(api_key=api_key)
             logger.info("Successfully configured Gemini API")
         except Exception as e:
             logger.error(f"Failed to configure Gemini API: {str(e)}")
