@@ -1,6 +1,6 @@
 import os
 from typing import Dict, Any, Optional
-from google.generativeai import genai  # Corrected import statement
+import google.generativeai as genai  # Corrected import statement
 from loguru import logger
 from pydantic import BaseModel
 
@@ -8,7 +8,7 @@ class BaseAgent:
     def __init__(self, model: str = "gemini-2.0-flash"):
         """Initialize the base agent with Gemini configuration."""
         self.model = model
-        configure(api_key=os.getenv("GEMINI_API_KEY"))
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
         self.client = genai.GenerativeModel(model)
         
     async def get_completion(self, 
