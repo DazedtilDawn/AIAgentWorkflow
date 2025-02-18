@@ -339,24 +339,23 @@ class Planner:
     async def generate_development_phases(self, 
                                        tasks: List[Task], 
                                        architecture: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate development phases with quality gates."""
+        """Generate development phases with tasks."""
         try:
             prompt = f"""Create a phased development plan with quality gates.
+            Return the response in JSON format as an array of development phases.
+            Each phase must have exactly this structure:
+            {{
+                "phase": "Phase Name",
+                "description": "Phase description",
+                "tasks": ["TASK-1", "TASK-2"],  # List of task IDs for this phase
+                "quality_gates": ["Gate 1", "Gate 2"]  # List of quality gates to pass
+            }}
 
             Tasks:
             {json.dumps([task.model_dump() for task in tasks], indent=2)}
 
             System Architecture:
             {json.dumps(architecture, indent=2)}
-
-            For each development phase:
-            1. Group related tasks
-            2. Define entry/exit criteria
-            3. Specify quality gates and checkpoints
-            4. Identify risk factors
-            5. Plan for continuous integration
-
-            Format as JSON array of phase objects.
             """
 
             logger.info("Sending prompt to Gemini model...")
@@ -408,20 +407,17 @@ class Planner:
             
             try:
                 phases_data = json.loads(response_text)
-                logger.info(f"Successfully parsed JSON with {len(phases_data)} development phases")
+                logger.info(f"Successfully parsed JSON with {len(phases_data)} phases")
             except json.JSONDecodeError as e:
                 logger.error(f"JSON parsing error: {str(e)}")
                 logger.error(f"Failed text: {response_text}")
                 raise
             
-            phases = phases_data
-            logger.info(f"Successfully created {len(phases)} development phases")
-            return phases
+            return phases_data
 
         except Exception as e:
             logger.error(f"Error in generate_development_phases: {str(e)}")
-            if 'response' in locals():
-                logger.error(f"Response text: {response.text if response.text else 'Empty response'}")
+            logger.error(f"Response text: {response.text}")
             raise
 
     async def generate_development_plan(self, specs: str, architecture: str) -> Dict[str, Any]:
@@ -540,20 +536,14 @@ To be generated.
 
 ## Development Phases
 {chr(10).join([f'''
-### Phase {i+1}: {phase['name']}
+### Phase {i+1}: {phase['phase']}
 {phase['description']}
 
 **Tasks:**
 {chr(10).join(f'- {task}' for task in phase['tasks'])}
 
-**Entry Criteria:**
-{chr(10).join(f'- {crit}' for crit in phase['entry_criteria'])}
-
-**Exit Criteria:**
-{chr(10).join(f'- {crit}' for crit in phase['exit_criteria'])}
-
-**Risk Factors:**
-{chr(10).join(f'- {risk}' for risk in phase['risk_factors'])}
+**Quality Gates:**
+{chr(10).join(f'- {gate}' for gate in phase['quality_gates'])}
 ''' for i, phase in enumerate(plan['development_phases'])])}
 
 ## Risk Mitigation
