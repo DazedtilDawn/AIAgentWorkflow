@@ -84,6 +84,12 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
+          echo "Tests directory contents:"
+          ls -la tests/
+          echo "Running tests..."
           python -m pytest tests/test_initial_analysis.py -v
 
   planning_and_implementation:
