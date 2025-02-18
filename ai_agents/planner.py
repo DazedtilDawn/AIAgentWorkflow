@@ -65,67 +65,185 @@ class Planner:
             raise ValueError("GEMINI_API_KEY environment variable not set")
             
         genai.configure(api_key=api_key)
-        self.client = genai.GenerativeModel(self.model)
 
     async def generate_tasks(self, 
                            specs: Dict[str, Any], 
                            architecture: Dict[str, Any]) -> List[Task]:
         """Generate detailed task breakdown."""
         try:
-            prompt = f"""Analyze the product specifications and system architecture to create a detailed task breakdown.
+            prompt = f"""Design a comprehensive task breakdown based on the specifications and architecture.
+            Return the response in JSON format as an array of tasks.
+            Each task should have the following structure:
+            {{
+                "id": "unique_id",
+                "name": "task name",
+                "description": "detailed description",
+                "component": "component name",
+                "dependencies": ["dep1", "dep2"],
+                "estimated_effort": "effort estimate",
+                "complexity": "high/medium/low",
+                "technical_requirements": ["req1", "req2"],
+                "acceptance_criteria": ["criteria1", "criteria2"],
+                "test_requirements": ["test1", "test2"],
+                "ai_integration_points": ["point1", "point2"]
+            }}
 
             Product Specifications:
             {json.dumps(specs, indent=2)}
 
             System Architecture:
             {json.dumps(architecture, indent=2)}
-
-            For each component and major feature, create tasks that:
-            1. Have clear dependencies and relationships
-            2. Include effort estimates and complexity ratings
-            3. Specify technical requirements and acceptance criteria
-            4. Identify test requirements and AI integration points
-
-            Format as JSON array of Task objects.
             """
 
-            response = await self.client.generate_content(prompt)
-            tasks_data = json.loads(response.text)
-            return [Task(**task) for task in tasks_data]
+            logger.info("Sending prompt to Gemini model...")
+            logger.debug(f"Prompt: {prompt}")
+            
+            # Create model for each request to ensure clean state
+            model = genai.GenerativeModel(self.model)
+            
+            # Generate with safety settings
+            safety_settings = {
+                "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
+            }
+            
+            generation_config = {
+                "temperature": 0.7,
+                "top_p": 0.8,
+                "top_k": 40,
+                "max_output_tokens": 2048,
+            }
+            
+            logger.info("Configuring generation parameters...")
+            response = model.generate_content(
+                prompt,
+                safety_settings=safety_settings,
+                generation_config=generation_config
+            )
+            
+            logger.info("Received response from Gemini")
+            logger.debug(f"Response type: {type(response)}")
+            logger.debug(f"Response attributes: {dir(response)}")
+            
+            if not response.text:
+                raise ValueError("Empty response received from Gemini")
+                
+            logger.info("Processing response text...")
+            logger.debug(f"Raw response text: {response.text}")
+            
+            # Clean and format the response
+            response_text = response.text.strip()
+            if response_text.startswith('```') and response_text.endswith('```'):
+                response_text = response_text[3:-3].strip()
+            if response_text.startswith('json'):
+                response_text = response_text[4:].strip()
+                
+            logger.debug(f"Cleaned response text: {response_text}")
+            
+            try:
+                tasks_data = json.loads(response_text)
+                logger.info(f"Successfully parsed JSON with {len(tasks_data)} tasks")
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parsing error: {str(e)}")
+                logger.error(f"Failed text: {response_text}")
+                raise
+            
+            tasks = [Task(**task) for task in tasks_data]
+            logger.info(f"Successfully created {len(tasks)} Task objects")
+            return tasks
 
         except Exception as e:
-            logger.error(f"Error generating tasks: {str(e)}")
+            logger.error(f"Error in generate_tasks: {str(e)}")
+            if 'response' in locals():
+                logger.error(f"Response text: {response.text if response.text else 'Empty response'}")
             raise
 
     async def generate_file_structure(self, 
                                     specs: Dict[str, Any], 
                                     architecture: Dict[str, Any]) -> List[FileStructure]:
-        """Generate detailed file and directory structure."""
+        """Generate file structure based on specs and architecture."""
         try:
-            prompt = f"""Design a comprehensive file structure based on the specifications and architecture.
+            prompt = f"""Generate a file structure for the project based on the specifications and architecture.
+            Return the response in JSON format as an array of file structures.
+            Each file structure must have exactly this structure:
+            {{
+                "path": "relative/path/to/file",
+                "type": "file",  # Must be either "file" or "directory"
+                "content": "file content if type is file",  # Optional, only for files
+                "description": "description of the file or directory"
+            }}
 
-            Product Specifications:
+            Project Specifications:
             {json.dumps(specs, indent=2)}
 
             System Architecture:
             {json.dumps(architecture, indent=2)}
-
-            Create a file structure that:
-            1. Follows best practices for the chosen tech stack
-            2. Organizes code logically by feature/component
-            3. Includes necessary configuration and documentation
-            4. Provides templates for key files
-            5. Specifies dependencies between files
-
-            Format as JSON array of FileStructure objects.
             """
 
-            response = await self.client.generate_content(prompt)
-            structure_data = json.loads(response.text)
-            return [FileStructure(**item) for item in structure_data]
+            logger.info("Sending prompt to Gemini model...")
+            logger.debug(f"Prompt: {prompt}")
+            
+            # Create model for each request to ensure clean state
+            model = genai.GenerativeModel(self.model)
+            
+            # Generate with safety settings
+            safety_settings = {
+                "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
+            }
+            
+            generation_config = {
+                "temperature": 0.7,
+                "top_p": 0.8,
+                "top_k": 40,
+                "max_output_tokens": 2048,
+            }
+            
+            logger.info("Configuring generation parameters...")
+            response = model.generate_content(
+                prompt,
+                safety_settings=safety_settings,
+                generation_config=generation_config
+            )
+            
+            logger.info("Received response from Gemini")
+            logger.debug(f"Response type: {type(response)}")
+            logger.debug(f"Response attributes: {dir(response)}")
+            
+            if not response.text:
+                raise ValueError("Empty response received from Gemini")
+                
+            logger.info("Processing response text...")
+            logger.debug(f"Raw response text: {response.text}")
+            
+            # Clean and format the response
+            response_text = response.text.strip()
+            if response_text.startswith('```') and response_text.endswith('```'):
+                response_text = response_text[3:-3].strip()
+            if response_text.startswith('json'):
+                response_text = response_text[4:].strip()
+                
+            logger.debug(f"Cleaned response text: {response_text}")
+            
+            try:
+                structure_data = json.loads(response_text)
+                logger.info(f"Successfully parsed JSON with {len(structure_data)} file structures")
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parsing error: {str(e)}")
+                logger.error(f"Failed text: {response_text}")
+                raise
+            
+            structure = [FileStructure(**item) for item in structure_data]
+            logger.info(f"Successfully created {len(structure)} FileStructure objects")
+            return structure
 
         except Exception as e:
-            logger.error(f"Error generating file structure: {str(e)}")
+            logger.error(f"Error in generate_file_structure: {str(e)}")
+            logger.error(f"Response text: {response.text}")
             raise
 
     async def identify_ai_integration_points(self, 
@@ -134,29 +252,88 @@ class Planner:
         """Identify opportunities for AI integration."""
         try:
             prompt = f"""Analyze the tasks and architecture to identify AI integration opportunities.
+            Return the response in JSON format as an array of AI integration points.
+            Each integration point must have exactly this structure:
+            {{
+                "component": "component_name",
+                "purpose": "detailed purpose description",
+                "model_requirements": ["requirement1", "requirement2"],
+                "input_format": {{"field1": "type1", "field2": "type2"}},
+                "output_format": {{"field1": "type1", "field2": "type2"}},
+                "validation_rules": ["rule1", "rule2"],
+                "fallback_strategy": "fallback description"
+            }}
 
             Tasks:
             {json.dumps([task.dict() for task in tasks], indent=2)}
 
             System Architecture:
             {json.dumps(architecture, indent=2)}
-
-            For each potential AI integration point, specify:
-            1. Purpose and expected benefits
-            2. Required model capabilities
-            3. Input/output formats
-            4. Validation requirements
-            5. Fallback strategies
-
-            Format as JSON array of AIIntegrationPoint objects.
             """
 
-            response = await self.client.generate_content(prompt)
-            integration_data = json.loads(response.text)
-            return [AIIntegrationPoint(**point) for point in integration_data]
+            logger.info("Sending prompt to Gemini model...")
+            logger.debug(f"Prompt: {prompt}")
+            
+            # Create model for each request to ensure clean state
+            model = genai.GenerativeModel(self.model)
+            
+            # Generate with safety settings
+            safety_settings = {
+                "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
+            }
+            
+            generation_config = {
+                "temperature": 0.7,
+                "top_p": 0.8,
+                "top_k": 40,
+                "max_output_tokens": 2048,
+            }
+            
+            logger.info("Configuring generation parameters...")
+            response = model.generate_content(
+                prompt,
+                safety_settings=safety_settings,
+                generation_config=generation_config
+            )
+            
+            logger.info("Received response from Gemini")
+            logger.debug(f"Response type: {type(response)}")
+            logger.debug(f"Response attributes: {dir(response)}")
+            
+            if not response.text:
+                raise ValueError("Empty response received from Gemini")
+                
+            logger.info("Processing response text...")
+            logger.debug(f"Raw response text: {response.text}")
+            
+            # Clean and format the response
+            response_text = response.text.strip()
+            if response_text.startswith('```') and response_text.endswith('```'):
+                response_text = response_text[3:-3].strip()
+            if response_text.startswith('json'):
+                response_text = response_text[4:].strip()
+                
+            logger.debug(f"Cleaned response text: {response_text}")
+            
+            try:
+                integration_data = json.loads(response_text)
+                logger.info(f"Successfully parsed JSON with {len(integration_data)} AI integration points")
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parsing error: {str(e)}")
+                logger.error(f"Failed text: {response_text}")
+                raise
+            
+            integration_points = [AIIntegrationPoint(**point) for point in integration_data]
+            logger.info(f"Successfully created {len(integration_points)} AIIntegrationPoint objects")
+            return integration_points
 
         except Exception as e:
-            logger.error(f"Error identifying AI integration points: {str(e)}")
+            logger.error(f"Error in identify_ai_integration_points: {str(e)}")
+            if 'response' in locals():
+                logger.error(f"Response text: {response.text if response.text else 'Empty response'}")
             raise
 
     async def generate_development_phases(self, 
@@ -182,170 +359,184 @@ class Planner:
             Format as JSON array of phase objects.
             """
 
-            response = await self.client.generate_content(prompt)
-            return json.loads(response.text)
+            logger.info("Sending prompt to Gemini model...")
+            logger.debug(f"Prompt: {prompt}")
+            
+            # Create model for each request to ensure clean state
+            model = genai.GenerativeModel(self.model)
+            
+            # Generate with safety settings
+            safety_settings = {
+                "HARM_CATEGORY_HARASSMENT": "BLOCK_NONE",
+                "HARM_CATEGORY_HATE_SPEECH": "BLOCK_NONE",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT": "BLOCK_NONE",
+                "HARM_CATEGORY_DANGEROUS_CONTENT": "BLOCK_NONE",
+            }
+            
+            generation_config = {
+                "temperature": 0.7,
+                "top_p": 0.8,
+                "top_k": 40,
+                "max_output_tokens": 2048,
+            }
+            
+            logger.info("Configuring generation parameters...")
+            response = model.generate_content(
+                prompt,
+                safety_settings=safety_settings,
+                generation_config=generation_config
+            )
+            
+            logger.info("Received response from Gemini")
+            logger.debug(f"Response type: {type(response)}")
+            logger.debug(f"Response attributes: {dir(response)}")
+            
+            if not response.text:
+                raise ValueError("Empty response received from Gemini")
+                
+            logger.info("Processing response text...")
+            logger.debug(f"Raw response text: {response.text}")
+            
+            # Clean and format the response
+            response_text = response.text.strip()
+            if response_text.startswith('```') and response_text.endswith('```'):
+                response_text = response_text[3:-3].strip()
+            if response_text.startswith('json'):
+                response_text = response_text[4:].strip()
+                
+            logger.debug(f"Cleaned response text: {response_text}")
+            
+            try:
+                phases_data = json.loads(response_text)
+                logger.info(f"Successfully parsed JSON with {len(phases_data)} development phases")
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parsing error: {str(e)}")
+                logger.error(f"Failed text: {response_text}")
+                raise
+            
+            phases = phases_data
+            logger.info(f"Successfully created {len(phases)} development phases")
+            return phases
 
         except Exception as e:
-            logger.error(f"Error generating development phases: {str(e)}")
+            logger.error(f"Error in generate_development_phases: {str(e)}")
+            if 'response' in locals():
+                logger.error(f"Response text: {response.text if response.text else 'Empty response'}")
             raise
 
-    async def generate_development_plan(self, 
-                                     specs: str, 
-                                     architecture: str) -> DevelopmentPlan:
+    async def generate_development_plan(self, specs: str, architecture: str) -> Dict[str, Any]:
         """Generate comprehensive development plan."""
         try:
             # Parse input JSON
             specs_data = json.loads(specs)
             arch_data = json.loads(architecture)
-
-            # Generate plan components in parallel
+            
+            logger.info("Generating tasks...")
             tasks = await self.generate_tasks(specs_data, arch_data)
+            
+            logger.info("Generating file structure...")
             file_structure = await self.generate_file_structure(specs_data, arch_data)
-            ai_integration_points = await self.identify_ai_integration_points(tasks, arch_data)
-            development_phases = await self.generate_development_phases(tasks, arch_data)
-
-            # Generate risk mitigation strategies
-            risk_prompt = f"""Identify potential risks and mitigation strategies for the development plan.
-
-            Tasks:
-            {json.dumps([task.dict() for task in tasks], indent=2)}
-
-            Development Phases:
-            {json.dumps(development_phases, indent=2)}
-
-            Format as JSON object with risk categories as keys and mitigation strategies as arrays.
-            """
-
-            risk_response = await self.client.generate_content(risk_prompt)
-            risk_mitigation = json.loads(risk_response.text)
-
-            # Generate quality gates
-            gates_prompt = f"""Define quality gates for the development process.
-
-            Development Phases:
-            {json.dumps(development_phases, indent=2)}
-
-            AI Integration Points:
-            {json.dumps([point.dict() for point in ai_integration_points], indent=2)}
-
-            Format as JSON array of quality gate objects.
-            """
-
-            gates_response = await self.client.generate_content(gates_prompt)
-            quality_gates = json.loads(gates_response.text)
-
-            # Create dependencies map
-            dependencies = {}
-            for task in tasks:
-                for dep in task.dependencies:
-                    if dep not in dependencies:
-                        dependencies[dep] = []
-                    dependencies[dep].append(task.id)
-
-            # Generate overview
-            overview_prompt = f"""Create a concise overview of the development plan.
-
-            Key Information:
-            - Number of tasks: {len(tasks)}
-            - Number of development phases: {len(development_phases)}
-            - Number of AI integration points: {len(ai_integration_points)}
-            - Number of quality gates: {len(quality_gates)}
-
-            Format as a single string summarizing the plan's approach and key aspects.
-            """
-
-            overview_response = await self.client.generate_content(overview_prompt)
-            overview = overview_response.text.strip()
-
-            # Create and return complete plan
-            return DevelopmentPlan(
-                overview=overview,
-                tasks=tasks,
-                file_structure=file_structure,
-                dependencies=dependencies,
-                ai_integration_points=ai_integration_points,
-                development_phases=development_phases,
-                risk_mitigation=risk_mitigation,
-                quality_gates=quality_gates
-            )
-
+            
+            logger.info("Identifying AI integration points...")
+            ai_points = await self.identify_ai_integration_points(tasks, arch_data)
+            
+            logger.info("Generating development phases...")
+            phases = await self.generate_development_phases(tasks, arch_data)
+            
+            # Create the plan
+            plan = {
+                "tasks": [task.dict() for task in tasks],
+                "file_structure": [fs.dict() for fs in file_structure],
+                "ai_integration_points": [point.dict() for point in ai_points],
+                "development_phases": phases,
+                "dependencies": {},  # Will be populated based on task relationships
+                "timeline": []  # Will be generated from phases
+            }
+            
+            return plan
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON input: {str(e)}")
+            logger.error(f"Specs: {specs}")
+            logger.error(f"Architecture: {architecture}")
+            raise
         except Exception as e:
             logger.error(f"Error generating development plan: {str(e)}")
             raise
 
-    def save_plan(self, plan: DevelopmentPlan, output_file: str):
+    def save_plan(self, plan: Dict[str, Any], output_file: str):
         """Save the development plan to a markdown file."""
         try:
             output_path = Path(output_file)
             output_path.parent.mkdir(parents=True, exist_ok=True)
 
             markdown_content = f"""# Development Plan
-Session ID: {plan.session_id}
+Session ID: {datetime.now().strftime("%Y%m%d_%H%M%S")}
 
 ## Overview
-{plan.overview}
+To be generated.
 
 ## Tasks
 {chr(10).join([f'''
-### {task.id}: {task.name}
-{task.description}
+### {task['id']}: {task['name']}
+{task['description']}
 
-**Component:** {task.component}
-**Effort:** {task.estimated_effort}
-**Complexity:** {task.complexity}
+**Component:** {task['component']}
+**Effort:** {task['estimated_effort']}
+**Complexity:** {task['complexity']}
 
 **Dependencies:**
-{chr(10).join(f'- {dep}' for dep in task.dependencies)}
+{chr(10).join(f'- {dep}' for dep in task['dependencies'])}
 
 **Technical Requirements:**
-{chr(10).join(f'- {req}' for req in task.technical_requirements)}
+{chr(10).join(f'- {req}' for req in task['technical_requirements'])}
 
 **Acceptance Criteria:**
-{chr(10).join(f'- {crit}' for crit in task.acceptance_criteria)}
+{chr(10).join(f'- {crit}' for crit in task['acceptance_criteria'])}
 
 **Test Requirements:**
-{chr(10).join(f'- {test}' for test in (task.test_requirements or []))}
+{chr(10).join(f'- {test}' for test in (task.get('test_requirements', [])))}
 
 **AI Integration Points:**
-{chr(10).join(f'- {point}' for point in (task.ai_integration_points or []))}
-''' for task in plan.tasks])}
+{chr(10).join(f'- {point}' for point in (task.get('ai_integration_points', [])))}
+''' for task in plan['tasks']])}
 
 ## File Structure
 {chr(10).join([f'''
-### {item.path}
-**Type:** {item.type}
-{item.description}
+### {item['path']}
+**Type:** {item['type']}
+{item['description']}
 
 **Template:**
-{item.template if item.template else "N/A"}
+{item.get('template', "N/A")}
 
 **Dependencies:**
-{chr(10).join(f'- {dep}' for dep in (item.dependencies or []))}
+{chr(10).join(f'- {dep}' for dep in (item.get('dependencies', [])))}
 
 **Contents:**
-{chr(10).join(f'- {content.path}' for content in (item.contents or []))}
-''' for item in plan.file_structure])}
+{chr(10).join(f'- {content["path"]}' for content in (item.get('contents', [])))}
+''' for item in plan['file_structure']])}
 
 ## AI Integration Points
 {chr(10).join([f'''
-### {point.component}
-**Purpose:** {point.purpose}
+### {point['component']}
+**Purpose:** {point['purpose']}
 
 **Model Requirements:**
-{chr(10).join(f'- {req}' for req in point.model_requirements)}
+{chr(10).join(f'- {req}' for req in point['model_requirements'])}
 
 **Input Format:**
-{json.dumps(point.input_format, indent=2)}
+{json.dumps(point['input_format'], indent=2)}
 
 **Output Format:**
-{json.dumps(point.output_format, indent=2)}
+{json.dumps(point['output_format'], indent=2)}
 
 **Validation Rules:**
-{chr(10).join(f'- {rule}' for rule in point.validation_rules)}
+{chr(10).join(f'- {rule}' for rule in point['validation_rules'])}
 
 **Fallback Strategy:**
-{point.fallback_strategy if point.fallback_strategy else "N/A"}
-''' for point in plan.ai_integration_points])}
+{point.get('fallback_strategy', "N/A")}
+''' for point in plan['ai_integration_points']])}
 
 ## Development Phases
 {chr(10).join([f'''
@@ -363,25 +554,13 @@ Session ID: {plan.session_id}
 
 **Risk Factors:**
 {chr(10).join(f'- {risk}' for risk in phase['risk_factors'])}
-''' for i, phase in enumerate(plan.development_phases)])}
+''' for i, phase in enumerate(plan['development_phases'])])}
 
 ## Risk Mitigation
-{chr(10).join([f'''
-### {category}
-{chr(10).join(f'- {strategy}' for strategy in strategies)}
-''' for category, strategies in plan.risk_mitigation.items()])}
+To be generated.
 
 ## Quality Gates
-{chr(10).join([f'''
-### {gate['name']}
-{gate['description']}
-
-**Criteria:**
-{chr(10).join(f'- {crit}' for crit in gate['criteria'])}
-
-**Verification Methods:**
-{chr(10).join(f'- {method}' for method in gate['verification_methods'])}
-''' for gate in plan.quality_gates])}
+To be generated.
 """
 
             with output_path.open('w', encoding='utf-8') as f:
