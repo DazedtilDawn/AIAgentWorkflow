@@ -56,16 +56,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        role: [product_manager, brainstorm_facilitator, architect]
+        role: [product-manager, brainstorm-facilitator, architect]
         include:
-          - role: product_manager
-            module: product_manager
+          - role: product-manager
             artifact: PRODUCT_SPECS.md
-          - role: brainstorm_facilitator
-            module: brainstorm_facilitator
+          - role: brainstorm-facilitator
             artifact: BRAINSTORM_OUTCOME.md
           - role: architect
-            module: architect
             artifact: SYSTEM_ARCHITECTURE.md
       fail-fast: false
     steps:
@@ -107,11 +104,9 @@ jobs:
         role: [planner, engineer]
         include:
           - role: planner
-            module: planner
             artifact: PLAN.md
             artifact_name: planner-output
           - role: engineer
-            module: engineer
             artifact: |
               src/**/*
               tests/**/*
@@ -149,7 +144,7 @@ jobs:
           # Create artifacts directory if needed
           mkdir -p artifacts
           # Run role
-          python -m ai_agents.${{ matrix.module }} execute
+          python -m ai_agents.${{ matrix.role }} execute
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
@@ -169,11 +164,9 @@ jobs:
         role: [reviewer, qa_engineer]
         include:
           - role: reviewer
-            module: reviewer
             artifact: REVIEW.md
             artifact_name: review-output
           - role: qa_engineer
-            module: qa_engineer
             artifact: TEST_DEBUG_REPORT.md
             artifact_name: qa-output
       fail-fast: false
@@ -208,7 +201,7 @@ jobs:
           # Create artifacts directory if needed
           mkdir -p artifacts
           # Run QA
-          python -m ai_agents.${{ matrix.module }} execute
+          python -m ai_agents.${{ matrix.role }} execute
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
