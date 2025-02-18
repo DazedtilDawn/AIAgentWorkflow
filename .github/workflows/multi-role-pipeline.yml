@@ -3,9 +3,15 @@
 # Required Repository Configuration:
 # 1. Environments (Settings → Environments):
 #    Create these environments exactly as named:
-#    - Name: staging
-#      URL: https://dev.example.com
+#    - Name: test
+#      URL: https://test.example.com
 #      Protection rules: None
+#    - Name: staging
+#      URL: https://staging.example.com
+#      Protection rules:
+#        - Required reviewers: None
+#        - Wait timer: None
+#        - Deployment branches: All
 #    - Name: production
 #      URL: https://prod.example.com
 #      Protection rules:
@@ -19,6 +25,8 @@
 #
 # 3. Repository Secrets (Settings → Secrets and variables → Actions → Secrets):
 #    - GEMINI_API_KEY: API key for Gemini AI model
+#    - AWS_ACCESS_KEY_ID: AWS access key for deployments
+#    - AWS_SECRET_ACCESS_KEY: AWS secret key for deployments
 #
 # Note: The context access warnings for secrets can be safely ignored
 # as long as the secrets are properly configured in the repository settings.
@@ -41,23 +49,31 @@ permissions:
   security-events: write
 
 jobs:
-  initial-analysis:
+  initial_analysis:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        role: [product-manager, brainstorm-facilitator, architect]
+        role: [product_manager, brainstorm_facilitator, architect]
         include:
-          - role: product-manager
+          - role: product_manager
             artifact: PRODUCT_SPECS.md
-          - role: brainstorm-facilitator
+          - role: brainstorm_facilitator
             artifact: BRAINSTORM_OUTCOME.md
           - role: architect
             artifact: SYSTEM_ARCHITECTURE.md
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-python
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ vars.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # Verify Google AI installation
+          python -c "import google.generativeai as genai; print(f'Google AI version: {genai.__version__}')"
       - name: Generate Analysis
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -70,8 +86,8 @@ jobs:
           compression-level: 9
           overwrite: false
 
-  planning-and-implementation:
-    needs: [initial-analysis]
+  planning_and_implementation:
+    needs: [initial_analysis]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -88,9 +104,17 @@ jobs:
             artifact_name: engineer-output
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-python
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ vars.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # Verify Google AI installation
+          python -c "import google.generativeai as genai; print(f'Google AI version: {genai.__version__}')"
       - uses: actions/download-artifact@v4
         with:
           pattern: '*-analysis'
@@ -108,24 +132,35 @@ jobs:
           compression-level: 9
           overwrite: false
 
-  quality-assurance:
-    needs: [planning-and-implementation]
+  quality_assurance:
+    needs: [planning_and_implementation]
     runs-on: ubuntu-latest
+    environment:
+      name: test
+      url: https://test.example.com
     strategy:
       matrix:
-        role: [reviewer, qa-engineer]
+        role: [reviewer, qa_engineer]
         include:
           - role: reviewer
             artifact: REVIEW.md
             artifact_name: review-output
-          - role: qa-engineer
+          - role: qa_engineer
             artifact: TEST_DEBUG_REPORT.md
             artifact_name: qa-output
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-python
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ vars.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # Verify Google AI installation
+          python -c "import google.generativeai as genai; print(f'Google AI version: {genai.__version__}')"
       - uses: actions/download-artifact@v4
         with:
           pattern: '*-output'
@@ -143,20 +178,28 @@ jobs:
           compression-level: 9
           overwrite: false
 
-  deploy-staging:
-    needs: [quality-assurance]
+  deploy_staging:
+    needs: [quality_assurance]
     runs-on: ubuntu-latest
     environment:
       name: staging
-      url: https://dev.example.com
+      url: https://staging.example.com
     concurrency: 
       group: staging_environment
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-python
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ vars.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # Verify Google AI installation
+          python -c "import google.generativeai as genai; print(f'Google AI version: {genai.__version__}')"
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -180,8 +223,8 @@ jobs:
           compression-level: 9
           overwrite: false
 
-  deploy-production:
-    needs: [deploy-staging]
+  deploy_production:
+    needs: [deploy_staging]
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -191,9 +234,17 @@ jobs:
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-python
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ vars.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # Verify Google AI installation
+          python -c "import google.generativeai as genai; print(f'Google AI version: {genai.__version__}')"
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -217,8 +268,8 @@ jobs:
           compression-level: 9
           overwrite: false
 
-  monitor-production:
-    needs: [deploy-production]
+  monitor_production:
+    needs: [deploy_production]
     runs-on: ubuntu-latest
     environment:
       name: production
@@ -228,9 +279,17 @@ jobs:
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/setup-python
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ vars.PYTHON_VERSION }}
+          cache: 'pip'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          # Verify Google AI installation
+          python -c "import google.generativeai as genai; print(f'Google AI version: {genai.__version__}')"
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
