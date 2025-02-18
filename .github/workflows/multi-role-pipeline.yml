@@ -56,10 +56,13 @@ jobs:
         role: [product_manager, brainstorm_facilitator, architect]
         include:
           - role: product_manager
+            module: product_manager
             artifact: PRODUCT_SPECS.md
           - role: brainstorm_facilitator
+            module: brainstorm_facilitator
             artifact: BRAINSTORM_OUTCOME.md
           - role: architect
+            module: architect
             artifact: SYSTEM_ARCHITECTURE.md
     steps:
       - uses: actions/checkout@v4
@@ -72,12 +75,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          # Install local package in editable mode
+          pip install -e .
           # Verify Google AI installation
           python -c "import google.generativeai as genai; print(f'Google AI version: {genai.__version__}')"
+          # Verify ai_agents package
+          python -c "import ai_agents; print(f'AI Agents version: {ai_agents.__version__}')"
       - name: Generate Analysis
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python -m ai_agents.${{ matrix.role }} generate
+        run: python -m ai_agents.${{ matrix.module }} generate
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.role }}-analysis
@@ -94,9 +101,11 @@ jobs:
         role: [planner, engineer]
         include:
           - role: planner
+            module: planner
             artifact: PLAN.md
             artifact_name: planner-output
           - role: engineer
+            module: engineer
             artifact: |
               src/**/*
               tests/**/*
@@ -113,8 +122,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          # Install local package in editable mode
+          pip install -e .
           # Verify Google AI installation
           python -c "import google.generativeai as genai; print(f'Google AI version: {genai.__version__}')"
+          # Verify ai_agents package
+          python -c "import ai_agents; print(f'AI Agents version: {ai_agents.__version__}')"
       - uses: actions/download-artifact@v4
         with:
           pattern: '*-analysis'
@@ -123,7 +136,7 @@ jobs:
       - name: Execute Role
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python -m ai_agents.${{ matrix.role }} execute
+        run: python -m ai_agents.${{ matrix.module }} execute
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
@@ -143,9 +156,11 @@ jobs:
         role: [reviewer, qa_engineer]
         include:
           - role: reviewer
+            module: reviewer
             artifact: REVIEW.md
             artifact_name: review-output
           - role: qa_engineer
+            module: qa_engineer
             artifact: TEST_DEBUG_REPORT.md
             artifact_name: qa-output
     steps:
@@ -159,8 +174,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          # Install local package in editable mode
+          pip install -e .
           # Verify Google AI installation
           python -c "import google.generativeai as genai; print(f'Google AI version: {genai.__version__}')"
+          # Verify ai_agents package
+          python -c "import ai_agents; print(f'AI Agents version: {ai_agents.__version__}')"
       - uses: actions/download-artifact@v4
         with:
           pattern: '*-output'
@@ -169,7 +188,7 @@ jobs:
       - name: Run QA Tasks
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python -m ai_agents.${{ matrix.role }} execute
+        run: python -m ai_agents.${{ matrix.module }} execute
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
