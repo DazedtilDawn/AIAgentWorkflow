@@ -27,6 +27,7 @@
 #    - GEMINI_API_KEY: API key for Gemini AI model
 #    - AWS_ACCESS_KEY_ID: AWS access key for deployments
 #    - AWS_SECRET_ACCESS_KEY: AWS secret key for deployments
+#    - AWS_ROLE_ARN: AWS role ARN for monitoring and analytics
 #
 # Note: The context access warnings for secrets can be safely ignored
 # as long as the secrets are properly configured in the repository settings.
@@ -299,15 +300,12 @@ jobs:
           compression-level: 9
           overwrite: false
 
-  monitor_production:
+  monitoring_and_analytics:
     needs: [deploy_production]
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://prod.example.com
-    concurrency: 
-      group: production_environment
-      cancel-in-progress: true
+      url: ${{ steps.deploy.outputs.url }}
     permissions:
       contents: read
       id-token: write
@@ -317,7 +315,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+          cache: pip
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -325,26 +323,14 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: '*-output'
-          merge-multiple: true
-          path: artifacts
-      - name: Monitor Deployment
+      - name: Run Monitoring Analysis
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
         run: |
-          # Create artifacts directory if needed
-          mkdir -p artifacts
-          # Monitor
-          python -m ai_agents.monitoring_analytics generate-report
-      - uses: actions/upload-artifact@v4
-        with:
-          name: monitoring-report
-          path: artifacts/MONITORING_REPORT.md
-          retention-days: 5
-          compression-level: 9
-          overwrite: false
+          # Convert role name to module format (replace - with _)
+          module_name="${{ matrix.role }}"
+          module_name=${module_name//-/_}
+          python -m ai_agents.${module_name} execute
