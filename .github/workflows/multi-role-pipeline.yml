@@ -84,10 +84,14 @@ jobs:
           python -c "import ai_agents; print(f'AI Agents version: {ai_agents.__version__}')"
           # List modules in ai_agents
           python -c "import ai_agents; print('Available modules:', [m for m in dir(ai_agents) if not m.startswith('_')])"
-      - name: Generate Analysis
+      - name: Run Analysis
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python -m ai_agents.${{ matrix.role | replace('-', '_') }} generate --verbose
+        run: |
+          # Convert role name to module format (replace - with _)
+          module_name="${{ matrix.role }}"
+          module_name=${module_name//-/_}
+          python -m ai_agents.${module_name} execute
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.role }}-analysis
@@ -156,9 +160,9 @@ jobs:
   quality_assurance:
     needs: [planning_and_implementation]
     runs-on: ubuntu-latest
-    environment:
+    environment: 
       name: test
-      url: https://test.example.com
+      url: ${{ steps.deploy.outputs.url }}
     strategy:
       matrix:
         role: [reviewer, qa_engineer]
@@ -215,7 +219,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: staging
-      url: https://staging.example.com
+      url: ${{ steps.deploy.outputs.url }}
     concurrency: 
       group: staging_environment
       cancel-in-progress: true
@@ -270,7 +274,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://prod.example.com
+      url: ${{ steps.deploy.outputs.url }}
     concurrency: 
       group: production_environment
       cancel-in-progress: true
