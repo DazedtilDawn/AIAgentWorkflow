@@ -154,31 +154,59 @@ def cli():
     pass
 
 @cli.command()
-def generate():
+@click.option('--verbose', is_flag=True, help='Enable verbose output')
+def generate(verbose):
     """Generate brainstorm ideas and save outcome."""
     try:
+        if verbose:
+            logger.info("Starting brainstorm generation")
+            logger.info(f"Current directory: {os.getcwd()}")
+            logger.info(f"Python path: {os.getenv('PYTHONPATH', 'Not set')}")
+            logger.info(f"Installed packages: {[p for p in __import__('pkg_resources').working_set]}")
+        
         # Create artifacts directory
         artifacts_dir = Path("artifacts")
         artifacts_dir.mkdir(exist_ok=True)
         
+        if verbose:
+            logger.info(f"Created artifacts directory: {artifacts_dir.absolute()}")
+        
         # Initialize facilitator
         facilitator = BrainstormFacilitator()
+        if verbose:
+            logger.info("Initialized BrainstormFacilitator")
         
         # Read product specs if available
         specs_file = artifacts_dir / "PRODUCT_SPECS.md"
         product_specs = specs_file.read_text() if specs_file.exists() else "No product specs available"
         
+        if verbose:
+            logger.info(f"Product specs file exists: {specs_file.exists()}")
+            if specs_file.exists():
+                logger.info(f"Product specs size: {len(product_specs)} characters")
+        
         # Generate ideas
+        if verbose:
+            logger.info("Starting idea generation")
+        
         outcome = asyncio.run(facilitator.generate_ideas(product_specs))
+        
+        if verbose:
+            logger.info(f"Generated {len(outcome.ideas)} ideas")
         
         # Save outcome
         output_file = artifacts_dir / "BRAINSTORM_OUTCOME.md"
         facilitator.save_outcome(outcome, str(output_file))
         
+        if verbose:
+            logger.info(f"Saved outcome to {output_file.absolute()}")
+        
         logger.info("Successfully generated brainstorm outcome")
         
     except Exception as e:
         logger.error(f"Error in generate command: {str(e)}")
+        if verbose:
+            logger.exception("Detailed error traceback:")
         raise
 
 if __name__ == '__main__':
