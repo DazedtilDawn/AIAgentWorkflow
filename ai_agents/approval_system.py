@@ -27,9 +27,9 @@ class ApprovalSystem:
         env_path = current_dir / '.env'
         load_dotenv(dotenv_path=env_path)
         
-        api_key = os.getenv("VITE_GEMINI_API_KEY")
+        api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            raise ValueError("VITE_GEMINI_API_KEY environment variable not set")
+            raise ValueError("GEMINI_API_KEY environment variable not set")
             
         # Initialize Gemini
         genai.configure(api_key=api_key)

@@ -1,0 +1,550 @@
+============================= test session starts =============================
+platform win32 -- Python 3.11.2, pytest-7.4.3, pluggy-1.5.0 -- C:\Users\apkos\MyPython\AIAgentWorkflow\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\apkos\MyPython\AIAgentWorkflow
+configfile: pytest.ini
+plugins: asyncio-0.23.3, cov-4.1.0
+asyncio: mode=Mode.AUTO
+collecting ... collected 4 items
+
+tests/test_integration.py::test_end_to_end_workflow FAILED               [ 25%]
+tests/test_integration.py::test_cross_role_validation FAILED             [ 50%]
+tests/test_integration.py::test_feedback_loops FAILED                    [ 75%]
+tests/test_integration.py::test_error_handling PASSED                    [100%]
+
+================================== FAILURES ===================================
+__________________________ test_end_to_end_workflow ___________________________
+
+test_dir = WindowsPath('C:/Users/apkos/MyPython/AIAgentWorkflow/tests/test_artifacts')
+agents = {'architect': <ai_agents.architect.Architect object at 0x000001957BB19750>, 'brainstorm_facilitator': <ai_agents.brain...nager object at 0x000001957BB778D0>, 'documenter': <ai_agents.documenter.Documenter object at 0x00000195786B86D0>, ...}
+mock_gemini = <AsyncMock id='1741537262608'>
+mock_responses = {'feature_specs': [{'acceptance_criteria': ['Create tasks with title and description', 'Assign tasks to team members']...productivity'], 'name': 'Mike', 'preferences': {'communication': 'Async', 'tools': 'CLI', 'workflow': 'Kanban'}, ...}]}
+
+    @pytest.mark.asyncio
+    async def test_end_to_end_workflow(test_dir, agents, mock_gemini, mock_responses):
+        """Test the complete development workflow from ideation to deployment."""
+        try:
+            # Step 1: Product Manager creates specifications
+>           specs = await agents['product_manager'].generate_specifications(SAMPLE_USER_PROMPT)
+
+tests\test_integration.py:358: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <ai_agents.product_manager.ProductManager object at 0x000001957A54A390>
+prompt = '\nCreate a modern web application for task management with the following features:\n1. User authentication\n2. Task creation and management\n3. Team collaboration\n4. Real-time updates\n5. Performance analytics\n'
+
+    async def generate_specifications(self, prompt: str) -> ProductSpecification:
+        """Wrapper method for integration test compatibility."""
+        try:
+>           specs = await self.create_product_specs(prompt)
+
+ai_agents\product_manager.py:290: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <ai_agents.product_manager.ProductManager object at 0x000001957A54A390>
+prompt = '\nCreate a modern web application for task management with the following features:\n1. User authentication\n2. Task creation and management\n3. Team collaboration\n4. Real-time updates\n5. Performance analytics\n'
+
+    async def create_product_specs(self, prompt: str) -> ProductSpecification:
+        """Create comprehensive product specifications from user prompt with automated validation."""
+        try:
+            # Generate market context and user personas
+            market_context = await self.analyze_market_context(prompt)
+>           personas = await self.create_user_personas(market_context)
+
+ai_agents\product_manager.py:232: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <ai_agents.product_manager.ProductManager object at 0x000001957A54A390>
+market_context = MarketContext(target_market=['Small to medium businesses', 'Remote teams'], competitors=[{'name': 'Trello', 'strengths...rformance monitoring'], opportunities=['AI-powered task automation', 'Advanced analytics', 'Integration capabilities'])
+
+    async def create_user_personas(self, market_context: MarketContext) -> List[UserPersona]:
+        """Generate user personas based on market context."""
+        try:
+            persona_prompt = f"""Create detailed user personas based on this market context:
+    
+            Market Context:
+            {json.dumps(market_context.model_dump(), indent=2)}
+    
+            For each major user segment, create a persona that includes:
+            1. Name and role
+            2. Goals and objectives
+            3. Key challenges
+            4. User preferences
+            5. Technical proficiency level
+    
+            Format the response as a JSON array of UserPersona objects.
+            """
+    
+            response = await self.client.generate_content(persona_prompt)
+            personas_data = json.loads(response.text)
+    
+            # Convert each persona dictionary to a UserPersona object
+            personas = []
+            for persona in personas_data:
+                # Ensure all required fields are present
+                persona_dict = {
+>                   "name": persona.get("name", ""),
+                    "role": persona.get("role", ""),
+                    "goals": persona.get("goals", []),
+                    "challenges": persona.get("challenges", []),
+                    "preferences": persona.get("preferences", {}),
+                    "technical_proficiency": persona.get("technical_proficiency", "Medium")
+                }
+E               AttributeError: 'str' object has no attribute 'get'
+
+ai_agents\product_manager.py:135: AttributeError
+
+During handling of the above exception, another exception occurred:
+
+test_dir = WindowsPath('C:/Users/apkos/MyPython/AIAgentWorkflow/tests/test_artifacts')
+agents = {'architect': <ai_agents.architect.Architect object at 0x000001957BB19750>, 'brainstorm_facilitator': <ai_agents.brain...nager object at 0x000001957BB778D0>, 'documenter': <ai_agents.documenter.Documenter object at 0x00000195786B86D0>, ...}
+mock_gemini = <AsyncMock id='1741537262608'>
+mock_responses = {'feature_specs': [{'acceptance_criteria': ['Create tasks with title and description', 'Assign tasks to team members']...productivity'], 'name': 'Mike', 'preferences': {'communication': 'Async', 'tools': 'CLI', 'workflow': 'Kanban'}, ...}]}
+
+    @pytest.mark.asyncio
+    async def test_end_to_end_workflow(test_dir, agents, mock_gemini, mock_responses):
+        """Test the complete development workflow from ideation to deployment."""
+        try:
+            # Step 1: Product Manager creates specifications
+            specs = await agents['product_manager'].generate_specifications(SAMPLE_USER_PROMPT)
+            specs_file = test_dir / "PRODUCT_SPECS.md"
+            specs_file.write_text(specs)
+    
+            # Step 2: Brainstorm Facilitator generates ideas
+            brainstorm = await agents['brainstorm_facilitator'].generate_ideas(
+                specs,
+                num_ideas=3
+            )
+            brainstorm_file = test_dir / "BRAINSTORM_OUTCOME.md"
+            brainstorm_file.write_text(brainstorm)
+    
+            # Step 3: Architect designs system
+            architecture = await agents['architect'].design_system(
+                specs,
+                brainstorm
+            )
+            arch_file = test_dir / "SYSTEM_ARCHITECTURE.md"
+            arch_file.write_text(architecture)
+    
+            # Step 4: Planner creates development plan
+            plan = await agents['planner'].create_plan(
+                specs,
+                architecture
+            )
+            plan_file = test_dir / "PLAN.md"
+            plan_file.write_text(plan)
+    
+            # Step 5: Engineer implements features
+            implementation = await agents['engineer'].implement_features(
+                specs,
+                plan
+            )
+    
+            # Step 6: Reviewer checks code
+            review = await agents['reviewer'].review_code(
+                implementation,
+                specs
+            )
+            review_file = test_dir / "REVIEW.md"
+            review_file.write_text(review)
+    
+            # Step 7: QA Engineer tests
+            test_results = await agents['qa_engineer'].run_tests(
+                implementation,
+                specs
+            )
+            test_file = test_dir / "TEST_DEBUG_REPORT.md"
+            test_file.write_text(test_results)
+    
+            # Step 8: DevOps Manager deploys
+            deployment = await agents['devops_manager'].deploy_system(
+                implementation,
+                test_results
+            )
+            deploy_file = test_dir / "DEPLOYMENT_LOG.md"
+            deploy_file.write_text(deployment)
+    
+            # Step 9: Monitoring & Analytics generates report
+            monitoring = await agents['monitoring_analytics'].generate_report(
+                deployment,
+                test_results
+            )
+            monitoring_file = test_dir / "MONITORING_REPORT.md"
+            monitoring_file.write_text(monitoring)
+    
+            # Step 10: Refactor Analyst suggests improvements
+            refactor = await agents['refactor_analyst'].analyze_code(
+                implementation,
+                monitoring
+            )
+            refactor_file = test_dir / "REFACTOR_SUGGESTIONS.md"
+            refactor_file.write_text(refactor)
+    
+            # Step 11: Documenter consolidates documentation
+            docs = await agents['documenter'].generate_documentation(
+                [
+                    specs_file,
+                    brainstorm_file,
+                    arch_file,
+                    plan_file,
+                    review_file,
+                    test_file,
+                    deploy_file,
+                    monitoring_file,
+                    refactor_file
+                ]
+            )
+            docs_file = test_dir / "DOCUMENTATION.md"
+            docs_file.write_text(docs)
+    
+            # Step 12: Project Manager coordinates
+            progress = await agents['project_manager'].validate_cross_role_outputs(
+                {
+                    'product_manager': specs,
+                    'brainstorm_facilitator': brainstorm,
+                    'architect': architecture,
+                    'planner': plan,
+                    'engineer': implementation,
+                    'reviewer': review,
+                    'qa_engineer': test_results,
+                    'devops_manager': deployment,
+                    'monitoring_analytics': monitoring,
+                    'refactor_analyst': refactor,
+                    'documenter': docs
+                }
+            )
+            progress_file = test_dir / "PROJECT_STATUS.md"
+            progress_file.write_text(progress)
+    
+            # Verify all files were created
+            assert specs_file.exists()
+            assert brainstorm_file.exists()
+            assert arch_file.exists()
+            assert plan_file.exists()
+            assert review_file.exists()
+            assert test_file.exists()
+            assert deploy_file.exists()
+            assert monitoring_file.exists()
+            assert refactor_file.exists()
+            assert docs_file.exists()
+            assert progress_file.exists()
+    
+        except Exception as e:
+>           pytest.fail(f"End-to-end test failed: {str(e)}")
+E           Failed: End-to-end test failed: 'str' object has no attribute 'get'
+
+tests\test_integration.py:482: Failed
+---------------------------- Captured stderr setup ----------------------------
+2025-02-17 16:34:06.567 | INFO     | ai_agents.approval_system:__init__:41 - Successfully connected to Gemini API
+2025-02-17 16:34:06.573 | INFO     | ai_agents.base_agent:__init__:27 - Successfully connected to Gemini API
+2025-02-17 16:34:06.576 | INFO     | ai_agents.base_agent:__init__:27 - Successfully connected to Gemini API
+2025-02-17 16:34:06.579 | INFO     | ai_agents.base_agent:__init__:27 - Successfully connected to Gemini API
+---------------------------- Captured stderr call -----------------------------
+2025-02-17 16:34:06.589 | ERROR    | ai_agents.product_manager:create_user_personas:146 - Error creating user personas: 'str' object has no attribute 'get'
+2025-02-17 16:34:06.589 | ERROR    | ai_agents.product_manager:create_product_specs:284 - Error creating product specifications: 'str' object has no attribute 'get'
+2025-02-17 16:34:06.589 | ERROR    | ai_agents.product_manager:generate_specifications:293 - Error generating specifications: 'str' object has no attribute 'get'
+_________________________ test_cross_role_validation __________________________
+
+test_dir = WindowsPath('C:/Users/apkos/MyPython/AIAgentWorkflow/tests/test_artifacts')
+agents = {'architect': <ai_agents.architect.Architect object at 0x000001957BB704D0>, 'brainstorm_facilitator': <ai_agents.brain...nager object at 0x000001957BCD46D0>, 'documenter': <ai_agents.documenter.Documenter object at 0x00000195786C4C50>, ...}
+mock_gemini = <AsyncMock id='1741538806032'>
+mock_responses = {'feature_specs': [{'acceptance_criteria': ['Create tasks with title and description', 'Assign tasks to team members']...productivity'], 'name': 'Mike', 'preferences': {'communication': 'Async', 'tools': 'CLI', 'workflow': 'Kanban'}, ...}]}
+
+    @pytest.mark.asyncio
+    async def test_cross_role_validation(test_dir, agents, mock_gemini, mock_responses):
+        """Test validation and consensus between different roles."""
+        try:
+            # Test Product Manager and Architect alignment
+>           specs = await agents['product_manager'].generate_specifications(SAMPLE_USER_PROMPT)
+
+tests\test_integration.py:489: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <ai_agents.product_manager.ProductManager object at 0x000001957BCD7910>
+prompt = '\nCreate a modern web application for task management with the following features:\n1. User authentication\n2. Task creation and management\n3. Team collaboration\n4. Real-time updates\n5. Performance analytics\n'
+
+    async def generate_specifications(self, prompt: str) -> ProductSpecification:
+        """Wrapper method for integration test compatibility."""
+        try:
+>           specs = await self.create_product_specs(prompt)
+
+ai_agents\product_manager.py:290: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <ai_agents.product_manager.ProductManager object at 0x000001957BCD7910>
+prompt = '\nCreate a modern web application for task management with the following features:\n1. User authentication\n2. Task creation and management\n3. Team collaboration\n4. Real-time updates\n5. Performance analytics\n'
+
+    async def create_product_specs(self, prompt: str) -> ProductSpecification:
+        """Create comprehensive product specifications from user prompt with automated validation."""
+        try:
+            # Generate market context and user personas
+            market_context = await self.analyze_market_context(prompt)
+>           personas = await self.create_user_personas(market_context)
+
+ai_agents\product_manager.py:232: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <ai_agents.product_manager.ProductManager object at 0x000001957BCD7910>
+market_context = MarketContext(target_market=['Small to medium businesses', 'Remote teams'], competitors=[{'name': 'Trello', 'strengths...rformance monitoring'], opportunities=['AI-powered task automation', 'Advanced analytics', 'Integration capabilities'])
+
+    async def create_user_personas(self, market_context: MarketContext) -> List[UserPersona]:
+        """Generate user personas based on market context."""
+        try:
+            persona_prompt = f"""Create detailed user personas based on this market context:
+    
+            Market Context:
+            {json.dumps(market_context.model_dump(), indent=2)}
+    
+            For each major user segment, create a persona that includes:
+            1. Name and role
+            2. Goals and objectives
+            3. Key challenges
+            4. User preferences
+            5. Technical proficiency level
+    
+            Format the response as a JSON array of UserPersona objects.
+            """
+    
+            response = await self.client.generate_content(persona_prompt)
+            personas_data = json.loads(response.text)
+    
+            # Convert each persona dictionary to a UserPersona object
+            personas = []
+            for persona in personas_data:
+                # Ensure all required fields are present
+                persona_dict = {
+>                   "name": persona.get("name", ""),
+                    "role": persona.get("role", ""),
+                    "goals": persona.get("goals", []),
+                    "challenges": persona.get("challenges", []),
+                    "preferences": persona.get("preferences", {}),
+                    "technical_proficiency": persona.get("technical_proficiency", "Medium")
+                }
+E               AttributeError: 'str' object has no attribute 'get'
+
+ai_agents\product_manager.py:135: AttributeError
+
+During handling of the above exception, another exception occurred:
+
+test_dir = WindowsPath('C:/Users/apkos/MyPython/AIAgentWorkflow/tests/test_artifacts')
+agents = {'architect': <ai_agents.architect.Architect object at 0x000001957BB704D0>, 'brainstorm_facilitator': <ai_agents.brain...nager object at 0x000001957BCD46D0>, 'documenter': <ai_agents.documenter.Documenter object at 0x00000195786C4C50>, ...}
+mock_gemini = <AsyncMock id='1741538806032'>
+mock_responses = {'feature_specs': [{'acceptance_criteria': ['Create tasks with title and description', 'Assign tasks to team members']...productivity'], 'name': 'Mike', 'preferences': {'communication': 'Async', 'tools': 'CLI', 'workflow': 'Kanban'}, ...}]}
+
+    @pytest.mark.asyncio
+    async def test_cross_role_validation(test_dir, agents, mock_gemini, mock_responses):
+        """Test validation and consensus between different roles."""
+        try:
+            # Test Product Manager and Architect alignment
+            specs = await agents['product_manager'].generate_specifications(SAMPLE_USER_PROMPT)
+            architecture = await agents['architect'].design_system(
+                specs,
+                specs
+            )
+    
+            # Test Engineer and QA alignment
+            implementation = await agents['engineer'].implement_features(
+                specs,
+                architecture
+            )
+            test_results = await agents['qa_engineer'].run_tests(
+                implementation,
+                specs
+            )
+    
+            # Test DevOps and Monitoring alignment
+            deployment = await agents['devops_manager'].deploy_system(
+                implementation,
+                test_results
+            )
+            monitoring = await agents['monitoring_analytics'].generate_report(
+                deployment,
+                test_results
+            )
+    
+            # Verify cross-role validation
+            validation = await agents['project_manager'].validate_cross_role_outputs({
+                'product_manager': specs,
+                'architect': architecture,
+                'engineer': implementation,
+                'qa_engineer': test_results,
+                'devops_manager': deployment,
+                'monitoring_analytics': monitoring
+            })
+    
+            validation_file = test_dir / "VALIDATION_REPORT.md"
+            validation_file.write_text(validation)
+            assert validation_file.exists()
+    
+        except Exception as e:
+>           pytest.fail(f"Cross-role validation test failed: {str(e)}")
+E           Failed: Cross-role validation test failed: 'str' object has no attribute 'get'
+
+tests\test_integration.py:530: Failed
+---------------------------- Captured stderr setup ----------------------------
+2025-02-17 16:34:07.247 | INFO     | ai_agents.approval_system:__init__:41 - Successfully connected to Gemini API
+2025-02-17 16:34:07.251 | INFO     | ai_agents.base_agent:__init__:27 - Successfully connected to Gemini API
+2025-02-17 16:34:07.253 | INFO     | ai_agents.base_agent:__init__:27 - Successfully connected to Gemini API
+2025-02-17 16:34:07.253 | INFO     | ai_agents.base_agent:__init__:27 - Successfully connected to Gemini API
+---------------------------- Captured stderr call -----------------------------
+2025-02-17 16:34:07.258 | ERROR    | ai_agents.product_manager:create_user_personas:146 - Error creating user personas: 'str' object has no attribute 'get'
+2025-02-17 16:34:07.258 | ERROR    | ai_agents.product_manager:create_product_specs:284 - Error creating product specifications: 'str' object has no attribute 'get'
+2025-02-17 16:34:07.258 | ERROR    | ai_agents.product_manager:generate_specifications:293 - Error generating specifications: 'str' object has no attribute 'get'
+_____________________________ test_feedback_loops _____________________________
+
+test_dir = WindowsPath('C:/Users/apkos/MyPython/AIAgentWorkflow/tests/test_artifacts')
+agents = {'architect': <ai_agents.architect.Architect object at 0x000001957A056210>, 'brainstorm_facilitator': <ai_agents.brain...nager object at 0x000001957BD8D750>, 'documenter': <ai_agents.documenter.Documenter object at 0x000001957BD8DF10>, ...}
+mock_gemini = <AsyncMock id='1741537359504'>
+mock_responses = {'feature_specs': [{'acceptance_criteria': ['Create tasks with title and description', 'Assign tasks to team members']...productivity'], 'name': 'Mike', 'preferences': {'communication': 'Async', 'tools': 'CLI', 'workflow': 'Kanban'}, ...}]}
+
+    @pytest.mark.asyncio
+    async def test_feedback_loops(test_dir, agents, mock_gemini, mock_responses):
+        """Test continuous feedback and improvement loops."""
+        try:
+            # Initial deployment
+>           implementation = await agents['engineer'].implement_features(
+                mock_responses['product_spec'],
+                mock_responses['product_spec']
+            )
+
+tests\test_integration.py:537: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <ai_agents.engineer.Engineer object at 0x000001957BD8D350>
+plan_file = {'assumptions': ['Stable internet connectivity', 'Modern browser support'], 'audience': [{'challenges': ['Multiple pro...itations', 'Timeline constraints'], 'dependencies': {'external': ['Cloud provider'], 'internal': ['DevOps team']}, ...}
+arch_file = {'assumptions': ['Stable internet connectivity', 'Modern browser support'], 'audience': [{'challenges': ['Multiple pro...itations', 'Timeline constraints'], 'dependencies': {'external': ['Cloud provider'], 'internal': ['DevOps team']}, ...}
+
+    async def implement_features(self, plan_file: str, arch_file: str) -> str:
+        """Wrapper method for integration test compatibility."""
+        try:
+>           with open(plan_file, 'r', encoding='utf-8') as f:
+E           TypeError: expected str, bytes or os.PathLike object, not dict
+
+ai_agents\engineer.py:315: TypeError
+
+During handling of the above exception, another exception occurred:
+
+test_dir = WindowsPath('C:/Users/apkos/MyPython/AIAgentWorkflow/tests/test_artifacts')
+agents = {'architect': <ai_agents.architect.Architect object at 0x000001957A056210>, 'brainstorm_facilitator': <ai_agents.brain...nager object at 0x000001957BD8D750>, 'documenter': <ai_agents.documenter.Documenter object at 0x000001957BD8DF10>, ...}
+mock_gemini = <AsyncMock id='1741537359504'>
+mock_responses = {'feature_specs': [{'acceptance_criteria': ['Create tasks with title and description', 'Assign tasks to team members']...productivity'], 'name': 'Mike', 'preferences': {'communication': 'Async', 'tools': 'CLI', 'workflow': 'Kanban'}, ...}]}
+
+    @pytest.mark.asyncio
+    async def test_feedback_loops(test_dir, agents, mock_gemini, mock_responses):
+        """Test continuous feedback and improvement loops."""
+        try:
+            # Initial deployment
+            implementation = await agents['engineer'].implement_features(
+                mock_responses['product_spec'],
+                mock_responses['product_spec']
+            )
+            test_results = await agents['qa_engineer'].run_tests(
+                implementation,
+                mock_responses['product_spec']
+            )
+            deployment = await agents['devops_manager'].deploy_system(
+                implementation,
+                test_results
+            )
+    
+            # Generate monitoring report
+            monitoring = await agents['monitoring_analytics'].generate_report(
+                deployment,
+                test_results
+            )
+    
+            # Analyze for improvements
+            refactor = await agents['refactor_analyst'].analyze_code(
+                implementation,
+                monitoring
+            )
+    
+            # Implement improvements
+            improved_implementation = await agents['engineer'].implement_features(
+                mock_responses['product_spec'],
+                refactor
+            )
+    
+            # Verify improvements
+            improved_test_results = await agents['qa_engineer'].run_tests(
+                improved_implementation,
+                mock_responses['product_spec']
+            )
+    
+            # Save feedback loop artifacts
+            feedback_dir = test_dir / "feedback_loop"
+            feedback_dir.mkdir(exist_ok=True)
+    
+            (feedback_dir / "initial_deployment.md").write_text(deployment)
+            (feedback_dir / "monitoring_report.md").write_text(monitoring)
+            (feedback_dir / "refactor_suggestions.md").write_text(refactor)
+            (feedback_dir / "improved_implementation.md").write_text(improved_implementation)
+            (feedback_dir / "improved_test_results.md").write_text(improved_test_results)
+    
+            assert (feedback_dir / "initial_deployment.md").exists()
+            assert (feedback_dir / "monitoring_report.md").exists()
+            assert (feedback_dir / "refactor_suggestions.md").exists()
+            assert (feedback_dir / "improved_implementation.md").exists()
+            assert (feedback_dir / "improved_test_results.md").exists()
+    
+        except Exception as e:
+>           pytest.fail(f"Feedback loops test failed: {str(e)}")
+E           Failed: Feedback loops test failed: expected str, bytes or os.PathLike object, not dict
+
+tests\test_integration.py:591: Failed
+---------------------------- Captured stderr setup ----------------------------
+2025-02-17 16:34:07.295 | INFO     | ai_agents.approval_system:__init__:41 - Successfully connected to Gemini API
+2025-02-17 16:34:07.298 | INFO     | ai_agents.base_agent:__init__:27 - Successfully connected to Gemini API
+2025-02-17 16:34:07.299 | INFO     | ai_agents.base_agent:__init__:27 - Successfully connected to Gemini API
+2025-02-17 16:34:07.300 | INFO     | ai_agents.base_agent:__init__:27 - Successfully connected to Gemini API
+---------------------------- Captured stderr call -----------------------------
+2025-02-17 16:34:07.305 | ERROR    | ai_agents.engineer:implement_features:328 - Error in implement_features: expected str, bytes or os.PathLike object, not dict
+============================== warnings summary ===============================
+.venv\Lib\site-packages\pydantic\_internal\_fields.py:149
+  C:\Users\apkos\MyPython\AIAgentWorkflow\.venv\Lib\site-packages\pydantic\_internal\_fields.py:149: UserWarning: Field "model_requirements" has conflict with protected namespace "model_".
+  
+  You may be able to resolve this warning by setting `model_config['protected_namespaces'] = ()`.
+    warnings.warn(
+
+tests/test_integration.py::test_end_to_end_workflow
+tests/test_integration.py::test_cross_role_validation
+tests/test_integration.py::test_feedback_loops
+tests/test_integration.py::test_error_handling
+  C:\Users\apkos\MyPython\AIAgentWorkflow\ai_agents\product_manager.py:79: RuntimeWarning: coroutine 'mock_gemini.<locals>.mock_generate_content' was never awaited
+    self.approval_system = ApprovalSystem(model)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_integration.py::test_end_to_end_workflow
+tests/test_integration.py::test_cross_role_validation
+tests/test_integration.py::test_feedback_loops
+tests/test_integration.py::test_error_handling
+  C:\Users\apkos\MyPython\AIAgentWorkflow\ai_agents\qa_engineer.py:12: RuntimeWarning: coroutine 'mock_gemini.<locals>.mock_generate_content' was never awaited
+    super().__init__(model)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_integration.py::test_end_to_end_workflow
+tests/test_integration.py::test_cross_role_validation
+tests/test_integration.py::test_feedback_loops
+tests/test_integration.py::test_error_handling
+  C:\Users\apkos\MyPython\AIAgentWorkflow\ai_agents\refactor_analyst.py:11: RuntimeWarning: coroutine 'mock_gemini.<locals>.mock_generate_content' was never awaited
+    super().__init__(model)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+tests/test_integration.py::test_end_to_end_workflow
+tests/test_integration.py::test_cross_role_validation
+tests/test_integration.py::test_feedback_loops
+tests/test_integration.py::test_error_handling
+  C:\Users\apkos\MyPython\AIAgentWorkflow\ai_agents\project_manager.py:47: RuntimeWarning: coroutine 'mock_gemini.<locals>.mock_generate_content' was never awaited
+    super().__init__(model)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_integration.py::test_end_to_end_workflow - Failed: End-to-e...
+FAILED tests/test_integration.py::test_cross_role_validation - Failed: Cross-...
+FAILED tests/test_integration.py::test_feedback_loops - Failed: Feedback loop...
+================== 3 failed, 1 passed, 17 warnings in 3.61s ===================
