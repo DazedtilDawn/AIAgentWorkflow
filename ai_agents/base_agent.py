@@ -1,6 +1,6 @@
 import os
 from typing import Dict, Any, Optional
-from google.generativeai import types, GenerativeModel, configure
+from google.generativeai import genai  # Corrected import statement
 from loguru import logger
 from pydantic import BaseModel
 
@@ -9,7 +9,7 @@ class BaseAgent:
         """Initialize the base agent with Gemini configuration."""
         self.model = model
         configure(api_key=os.getenv("GEMINI_API_KEY"))
-        self.client = GenerativeModel(model)
+        self.client = genai.GenerativeModel(model)
         
     async def get_completion(self, 
                            prompt: str, 
@@ -22,7 +22,7 @@ class BaseAgent:
             
             response = self.client.generate_content(
                 contents=full_prompt,
-                generation_config=types.GenerationConfig(
+                generation_config=genai.GenerationConfig(
                     temperature=temperature
                 )
             )
