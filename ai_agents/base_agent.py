@@ -1,16 +1,54 @@
 import os
+import logging
+from functools import wraps
 from typing import Dict, Any, Optional
-from google.generativeai import genai  # Corrected import statement
+from google.generativeai import genai  
 from loguru import logger
 from pydantic import BaseModel
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG if os.getenv("ACTIONS_STEP_DEBUG") else logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+def debug_hook(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        logger.debug(f"ENTRY: {func.__name__} - args: {args}, kwargs: {kwargs}")
+        try:
+            result = func(*args, **kwargs)
+            logger.debug(f"EXIT: {func.__name__} - result: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"ERROR: {func.__name__} - {str(e)}")
+            raise
+    return wrapper
 
 class BaseAgent:
     def __init__(self, model: str = "gemini-2.0-flash"):
         """Initialize the base agent with Gemini configuration."""
         self.model = model
-        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        self._validate_and_configure()
         self.client = genai.GenerativeModel(model)
         
+    @debug_hook
+    def _validate_and_configure(self):
+        """Validate and configure the Gemini API."""
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            logger.error("GEMINI_API_KEY environment variable is not set")
+            raise ValueError("GEMINI_API_KEY environment variable is not set")
+            
+        try:
+            genai.configure(api_key=api_key)
+            logger.info("Successfully configured Gemini API")
+        except Exception as e:
+            logger.error(f"Failed to configure Gemini API: {str(e)}")
+            raise
+    
+    @debug_hook
     async def get_completion(self, 
                            prompt: str, 
                            system_message: Optional[str] = None,
@@ -37,6 +75,7 @@ class BaseAgent:
             logger.error(f"Error getting completion: {str(e)}")
             raise
     
+    @debug_hook
     def load_file(self, filepath: str) -> str:
         """Safely load file content."""
         try:
@@ -46,6 +85,7 @@ class BaseAgent:
             logger.error(f"Error loading file {filepath}: {str(e)}")
             raise
     
+    @debug_hook
     def save_file(self, filepath: str, content: str) -> None:
         """Safely save content to file."""
         try:
@@ -56,6 +96,7 @@ class BaseAgent:
             logger.error(f"Error saving file {filepath}: {str(e)}")
             raise
             
+    @debug_hook
     def validate_file_exists(self, filepath: str) -> bool:
         """Validate that a required file exists."""
         if not os.path.exists(filepath):

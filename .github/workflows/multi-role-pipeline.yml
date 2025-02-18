@@ -49,9 +49,43 @@ permissions:
 
 env:
   PYTHON_VERSION: '3.11'
+  ACTIONS_STEP_DEBUG: true  # Enable step debugging
+  ACTIONS_RUNNER_DEBUG: true  # Enable runner debugging
 
 jobs:
+  validate_secrets:
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Validate Secrets
+        id: validate
+        run: |
+          # Check required secrets
+          if [[ -z "${{ secrets.GEMINI_API_KEY }}" ]]; then
+            echo "::error::GEMINI_API_KEY is not set"
+            exit 1
+          fi
+          if [[ -z "${{ secrets.AWS_ROLE_ARN }}" ]]; then
+            echo "::error::AWS_ROLE_ARN is not set"
+            exit 1
+          fi
+          echo "All required secrets are set"
+          
+      - name: Validate Environment Variables
+        id: validate_env
+        run: |
+          # Check required variables
+          if [[ -z "${{ vars.AWS_REGION }}" ]]; then
+            echo "::error::AWS_REGION variable is not set"
+            exit 1
+          fi
+          echo "All required variables are set"
+
   initial_analysis:
+    needs: [validate_secrets]
     runs-on: ubuntu-latest
     environment: development
     permissions:
