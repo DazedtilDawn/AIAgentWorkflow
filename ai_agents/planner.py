@@ -265,7 +265,7 @@ class Planner:
             }}
 
             Tasks:
-            {json.dumps([task.dict() for task in tasks], indent=2)}
+            {json.dumps([task.model_dump() for task in tasks], indent=2)}
 
             System Architecture:
             {json.dumps(architecture, indent=2)}
@@ -344,7 +344,7 @@ class Planner:
             prompt = f"""Create a phased development plan with quality gates.
 
             Tasks:
-            {json.dumps([task.dict() for task in tasks], indent=2)}
+            {json.dumps([task.model_dump() for task in tasks], indent=2)}
 
             System Architecture:
             {json.dumps(architecture, indent=2)}
@@ -445,9 +445,9 @@ class Planner:
             
             # Create the plan
             plan = {
-                "tasks": [task.dict() for task in tasks],
-                "file_structure": [fs.dict() for fs in file_structure],
-                "ai_integration_points": [point.dict() for point in ai_points],
+                "tasks": [task.model_dump() for task in tasks],
+                "file_structure": [fs.model_dump() for fs in file_structure],
+                "ai_integration_points": [point.model_dump() for point in ai_points],
                 "development_phases": phases,
                 "dependencies": {},  # Will be populated based on task relationships
                 "timeline": []  # Will be generated from phases
