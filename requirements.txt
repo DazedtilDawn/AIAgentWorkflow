@@ -1,5 +1,5 @@
 # Google AI dependencies
-google-generativeai==0.3.3
+google-generativeai
 
 # Core dependencies
 python-dotenv==1.0.0

@@ -8,7 +8,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         # Google AI dependencies
-        "google-generativeai==0.3.2",
+        "google-generativeai",
         
         # Core dependencies
         "python-dotenv>=1.0.0",

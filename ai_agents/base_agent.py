@@ -3,32 +3,14 @@ from typing import Dict, Any, Optional
 from google.generativeai import types, GenerativeModel, configure
 from loguru import logger
 from pydantic import BaseModel
-from dotenv import load_dotenv
-
-load_dotenv()
 
 class BaseAgent:
     def __init__(self, model: str = "gemini-2.0-flash"):
         """Initialize the base agent with Gemini configuration."""
         self.model = model
+        configure(api_key=os.getenv("GEMINI_API_KEY"))
+        self.client = GenerativeModel(model)
         
-        # Configure Gemini with API key
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY environment variable is not set")
-        
-        # Initialize the model
-        configure(api_key=api_key)
-        self.client = GenerativeModel(self.model)
-        
-        # Test the configuration
-        try:
-            response = self.client.generate_content("Test connection")
-            logger.info("Successfully connected to Gemini API")
-        except Exception as e:
-            logger.error(f"Failed to connect to Gemini API: {str(e)}")
-            raise
-    
     async def get_completion(self, 
                            prompt: str, 
                            system_message: Optional[str] = None,
@@ -46,7 +28,7 @@ class BaseAgent:
             )
             
             # Check if the response has content
-            if not response.text:
+            if not response.candidates:
                 raise Exception("No response generated")
             
             return response.text
