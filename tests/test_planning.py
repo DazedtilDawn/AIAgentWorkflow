@@ -5,6 +5,7 @@ from loguru import logger
 import json
 import os
 import google.generativeai as genai
+import inspect
 
 @pytest.fixture(scope="module")
 def event_loop():
@@ -20,6 +21,16 @@ def planner():
 
 def test_planner_initialization(planner):
     """Test that the planner initializes correctly."""
+    # Log available methods
+    logger.info("Available Planner methods:")
+    for name, method in inspect.getmembers(planner, predicate=inspect.ismethod):
+        logger.info(f"Method: {name}")
+    
+    # Log environment info
+    logger.info(f"Running on OS: {os.name}")
+    logger.info(f"Python path: {os.environ.get('PYTHONPATH', 'Not set')}")
+    logger.info(f"Working directory: {os.getcwd()}")
+    
     assert planner.model == "gemini-2.0-flash"
     assert os.getenv("GEMINI_API_KEY") is not None, "GEMINI_API_KEY environment variable not set"
 
@@ -28,6 +39,11 @@ def test_planner_initialization(planner):
 async def test_generate_plan(planner):
     """Test plan generation with mock inputs."""
     logger.info("Starting test_generate_plan")
+    
+    # Log planner state
+    logger.info("Planner methods at test start:")
+    for name, method in inspect.getmembers(planner, predicate=inspect.ismethod):
+        logger.info(f"Method: {name}")
     
     # Test simple content generation first
     try:
