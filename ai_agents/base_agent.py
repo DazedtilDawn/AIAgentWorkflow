@@ -1,6 +1,6 @@
 import os
 from typing import Dict, Any, Optional
-import google.generativeai as genai  # Corrected import statement
+from google.generativeai import genai  # Corrected import statement
 from loguru import logger
 from pydantic import BaseModel
 
