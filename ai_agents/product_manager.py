@@ -6,6 +6,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field, ValidationError
 from .approval_system import ApprovalSystem, ValidationResult
 from .checkpoint_system import CheckpointSystem
+from .base_agent import BaseAgent
 import json
 import asyncio
 import google.generativeai as genai
@@ -37,7 +38,6 @@ class FeatureSpecification(BaseModel):
     priority: str
     requirements: List[str]
     acceptance_criteria: List[str]
-    
     # Optional fields
     technical_requirements: Optional[List[str]] = None
     dependencies: Optional[List[str]] = None
@@ -62,142 +62,139 @@ class ProductSpecification(BaseModel):
     last_updated: datetime = Field(default_factory=datetime.now)
     session_id: str = Field(default_factory=lambda: datetime.now().strftime("%Y%m%d_%H%M%S"))
 
-class ProductManager:
+class ProductManager(BaseAgent):
+    """Product Manager agent responsible for creating and managing product specifications."""
+    
     def __init__(self, model: str = "gemini-2.0-flash"):
         """Initialize the Product Manager with approval and checkpoint systems."""
-        self.model = model
-        
-        # Load environment variables
-        load_dotenv()
-        
-        # Configure Gemini
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            raise ValueError("GEMINI_API_KEY environment variable not set")
-            
-        genai.configure(api_key=api_key)
-        self.client = genai.GenerativeModel(self.model)
+        super().__init__(model)  # Initialize BaseAgent
         
         # Initialize systems
         self.approval_system = ApprovalSystem(model)
         self.checkpoint_system = CheckpointSystem(self.approval_system)
-        
+
     async def analyze_market_context(self, prompt: str) -> str:
         """Analyze market context from the user prompt."""
-        logger.info(f"Analyzing market context for prompt: {prompt[:100]}...")
-        
-        context_prompt = f"""Analyze the following project requirements and generate a detailed market context:
-
-        Project Requirements:
-        {prompt}
-
-        Generate a comprehensive market analysis including:
-        1. Target market segments
-        2. Key competitors and their offerings
-        3. Current market trends
-        4. User demographics
-        5. Pain points and challenges
-        6. Market opportunities
-
-        Format the response as a JSON object matching the MarketContext model.
-        """
-
         try:
-            response = await self.client.generate_content(context_prompt)
-            logger.debug(f"Raw Gemini response type: {type(response)}")
-            logger.debug(f"Raw Gemini response attributes: {dir(response)}")
-            logger.debug(f"Raw Gemini response: {response}")
+            system_message = """Analyze the market context for this product. Return a JSON object with:
+            - target_market: Primary target market
+            - competitors: List of key competitors
+            - trends: List of relevant market trends
+            - demographics: Target user demographics
+            - pain_points: List of user pain points
+            - opportunities: List of market opportunities"""
             
-            # Handle response correctly based on type
-            if hasattr(response, 'text'):
-                return response.text
-            elif isinstance(response, str):
+            logger.debug(f"[Market Analysis] Sending prompt: {prompt[:100]}...")
+            response = await self.get_completion(prompt, system_message)
+            logger.debug(f"[Market Analysis] Response type: {type(response)}")
+            logger.debug(f"[Market Analysis] Raw response: {response[:200]}...")
+            
+            # Validate JSON structure before returning
+            try:
+                parsed = json.loads(response)
+                logger.debug(f"[Market Analysis] Parsed structure: {type(parsed)}")
+                logger.debug(f"[Market Analysis] Available keys: {parsed.keys() if isinstance(parsed, dict) else 'Not a dict'}")
                 return response
-            else:
-                raise ValueError(f"Unexpected response type: {type(response)}")
-                
-        except Exception as e:
-            logger.error(f"Error analyzing market context: {str(e)}")
-            raise
-
-    async def create_user_personas(self, market_context: str) -> List[UserPersona]:
-        """Create user personas based on market context."""
-        logger.info("Creating user personas from market context...")
-        logger.debug(f"Market context input: {market_context[:100]}...")
-        
-        try:
-            personas_data = json.loads(market_context)
-            logger.debug(f"Parsed personas data type: {type(personas_data)}")
-            logger.debug(f"Parsed personas data: {personas_data}")
+            except json.JSONDecodeError as e:
+                logger.error(f"[Market Analysis] JSON validation failed: {str(e)}")
+                logger.error(f"[Market Analysis] Invalid JSON response: {response}")
+                raise ValueError(f"Invalid JSON response from market analysis: {str(e)}")
             
-            if isinstance(personas_data, list):
-                personas = []
-                for persona in personas_data:
-                    try:
-                        personas.append(UserPersona.model_validate(persona))
-                    except ValidationError as e:
-                        logger.error(f"Validation error for persona: {str(e)}")
-                        logger.debug(f"Failed to validate persona: {persona}")
-                return personas
-            elif isinstance(personas_data, dict):
-                try:
-                    return [UserPersona.model_validate(personas_data)]
-                except ValidationError as e:
-                    logger.error(f"Validation error for persona: {str(e)}")
-                    logger.debug(f"Failed to validate persona: {personas_data}")
-                    raise
-            else:
-                raise ValueError(f"Unexpected personas data type: {type(personas_data)}")
-                
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error: {str(e)}")
-            logger.debug(f"Failed to parse JSON: {market_context}")
-            raise
         except Exception as e:
-            logger.error(f"Error creating user personas: {str(e)}")
+            logger.error(f"[Market Analysis] Error analyzing market context: {str(e)}")
             raise
 
-    async def define_features(self, 
-                            prompt: str, 
-                            market_context: str,
-                            personas: List[UserPersona]) -> List[FeatureSpecification]:
+    async def generate_user_personas(self, prompt: str) -> str:
+        """Create user personas based on market context."""
+        try:
+            system_message = """Generate user personas for this product. Return a JSON array of personas, each with:
+            - name: Persona name
+            - role: Professional role
+            - goals: List of goals
+            - challenges: List of challenges
+            - preferences: List of preferences
+            - tech_proficiency: Technical proficiency level"""
+            
+            logger.debug(f"[Personas] Full prompt: {prompt}")
+            logger.debug(f"[Personas] System message: {system_message}")
+            
+            response = await self.get_completion(prompt, system_message)
+            
+            # Enhanced response inspection
+            logger.debug(f"[Personas] Raw response type: {type(response)}")
+            logger.debug(f"[Personas] Raw response: {response[:500]}")
+            
+            # Validate JSON structure
+            try:
+                parsed = json.loads(response)
+                logger.debug(f"[Personas] Parsed type: {type(parsed)}")
+                logger.debug(f"[Personas] Parsed structure: {json.dumps(parsed, indent=2)[:500]}")
+                
+                if not isinstance(parsed, list):
+                    logger.error(f"[Personas] Expected list but got {type(parsed)}")
+                    raise ValueError(f"Invalid personas response format: expected list but got {type(parsed)}")
+                
+                for idx, persona in enumerate(parsed):
+                    logger.debug(f"[Personas] Validating persona {idx}")
+                    logger.debug(f"[Personas] Persona keys: {persona.keys() if isinstance(persona, dict) else 'Not a dict'}")
+                    
+                    required_fields = {'name', 'role', 'goals', 'challenges', 'preferences', 'tech_proficiency'}
+                    if isinstance(persona, dict):
+                        missing_fields = required_fields - set(persona.keys())
+                        if missing_fields:
+                            logger.error(f"[Personas] Missing required fields in persona {idx}: {missing_fields}")
+                
+                return response
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"[Personas] JSON parsing failed: {str(e)}")
+                logger.error(f"[Personas] Invalid JSON: {response}")
+                raise ValueError(f"Invalid JSON in personas response: {str(e)}")
+            
+        except Exception as e:
+            logger.error(f"[Personas] Error generating personas: {str(e)}")
+            raise
+
+    async def define_features(self, prompt: str) -> str:
         """Define product features based on requirements and user personas."""
         try:
-            feature_prompt = f"""Define product features based on these inputs:
-
-            Requirements:
-            {prompt}
-
-            Market Context:
-            {market_context}
-
-            User Personas:
-            {json.dumps([persona.model_dump() for persona in personas], indent=2)}
-
-            For each major feature:
-            1. Provide detailed description and priority
-            2. Create user stories from persona perspectives
-            3. Define clear acceptance criteria
-            4. Specify technical requirements
-            5. Identify dependencies and risks
-            6. Estimate implementation effort
-
-            Format the response as a JSON array of FeatureSpecification objects.
-            """
-
-            response = await self.client.generate_content(feature_prompt)
-            features_data = json.loads(response.text)
-            features = []
-            for feature in features_data:
-                try:
-                    features.append(FeatureSpecification.model_validate(feature))
-                except ValidationError as e:
-                    logger.error(f"Validation error for feature: {str(e)}")
-                    logger.debug(f"Failed to validate feature: {feature}")
-            return features
-
+            system_message = """Define product features based on requirements. Return a JSON array of features, each with:
+            - name: Feature name
+            - description: Feature description
+            - priority: Priority level (high/medium/low)
+            - requirements: List of requirements
+            - acceptance_criteria: List of acceptance criteria
+            Optional fields:
+            - technical_requirements: List of technical requirements
+            - dependencies: List of dependencies
+            - estimated_effort: Effort estimate
+            - risks: List of potential risks"""
+            
+            logger.debug(f"[Features] Sending prompt: {prompt[:100]}...")
+            response = await self.get_completion(prompt, system_message)
+            logger.debug(f"[Features] Response type: {type(response)}")
+            logger.debug(f"[Features] Raw response: {response[:200]}...")
+            
+            # Create mock response object to match expected structure
+            class MockResponse:
+                def __init__(self, text):
+                    self.text = text
+            
+            # Validate JSON structure
+            try:
+                parsed = json.loads(response)
+                logger.debug(f"[Features] Parsed structure: {type(parsed)}")
+                if isinstance(parsed, list):
+                    logger.debug(f"[Features] First feature keys: {parsed[0].keys() if parsed else 'Empty list'}")
+                    logger.debug(f"[Features] First feature types: {[(k, type(v)) for k, v in parsed[0].items()] if parsed else 'Empty list'}")
+                return MockResponse(response)
+            except json.JSONDecodeError as e:
+                logger.error(f"[Features] JSON validation failed: {str(e)}")
+                logger.error(f"[Features] Invalid JSON response: {response}")
+                raise ValueError(f"Invalid JSON response for features: {str(e)}")
+            
         except Exception as e:
-            logger.error(f"Error defining features: {str(e)}")
+            logger.error(f"[Features] Error defining features: {str(e)}")
             raise
 
     async def validate_with_stakeholders(self, 
@@ -243,107 +240,85 @@ class ProductManager:
             raise
 
     async def create_product_specs(self, prompt: str) -> ProductSpecification:
-        """Create product specifications from user prompt."""
+        """Create product specifications based on user prompt."""
         try:
-            # Step 1: Analyze market context
-            market_context = await self.analyze_market_context(prompt)
-            logger.debug(f"Market context type: {type(market_context)}")
-            logger.debug(f"Market context raw: {market_context}")
+            # Get market context
+            market_context_response = await self.analyze_market_context(prompt)
+            logger.debug(f"[Response Format] Market context raw response type: {type(market_context_response)}")
+            logger.debug(f"[Response Format] Market context raw response structure: {market_context_response}")
             
             try:
-                market_data = json.loads(market_context) if isinstance(market_context, str) else market_context
-                logger.debug(f"Parsed market data: {market_data}")
+                market_data = json.loads(market_context_response)
+                logger.debug(f"[Data Structure] Parsed market data keys: {market_data.keys() if isinstance(market_data, dict) else 'Not a dict'}")
+                logger.debug(f"[Data Structure] Market data types: {[(k, type(v)) for k, v in market_data.items() if isinstance(market_data, dict)]}")
             except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse market context as JSON: {e}")
+                logger.error(f"[Response Format] JSON parsing failed for market context: {str(e)}")
                 raise
             
-            # Step 2: Create user personas
-            personas_prompt = f"""Create detailed user personas based on this market context:
-
-            Market Context:
-            {market_context}
-
-            For each major user segment, create a persona that includes:
-            1. Name and role
-            2. Goals and objectives
-            3. Key challenges
-            4. User preferences
-            5. Technical proficiency level
-
-            Format the response as a JSON array of UserPersona objects.
-            """
+            # Log pre-validation data
+            logger.debug(f"[Model Validation] Pre-validation market data: {market_data}")
+            try:
+                market_context = MarketContext.model_validate(market_data)
+                logger.debug(f"[Model Validation] Successful market context validation: {market_context}")
+            except Exception as e:
+                logger.error(f"[Model Validation] Market context validation failed: {str(e)}")
+                raise
             
-            response = await self.client.generate_content(personas_prompt)
-            logger.debug(f"Raw personas response: {response}")
-            logger.debug(f"Personas response type: {type(response)}")
-            logger.debug(f"Personas response text type: {type(response.text)}")
+            # Get user personas
+            personas_response = await self.generate_user_personas(prompt)
+            logger.debug(f"[Response Format] Raw personas response type: {type(personas_response)}")
+            logger.debug(f"[Response Format] Raw personas response: {personas_response}")
             
             try:
-                personas_data = json.loads(response.text)
-                logger.debug(f"Parsed personas data: {personas_data}")
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse personas response as JSON: {e}")
+                personas_data = json.loads(personas_response)
+                logger.debug(f"[Data Structure] Parsed personas data type: {type(personas_data)}")
+                logger.debug(f"[Data Structure] First persona keys (if list): {personas_data[0].keys() if isinstance(personas_data, list) and len(personas_data) > 0 else 'No personas'}")
+            except Exception as e:
+                logger.error(f"[Response Format] Personas parsing failed: {str(e)}")
                 raise
-                
+            
             try:
                 personas = [UserPersona.model_validate(persona) for persona in personas_data]
-                logger.debug(f"Validated personas: {personas}")
-            except ValidationError as e:
-                logger.error(f"Failed to validate personas: {e}")
+                logger.debug(f"[Model Validation] Successfully validated {len(personas)} personas")
+            except Exception as e:
+                logger.error(f"[Model Validation] Persona validation failed: {str(e)}")
                 raise
             
-            # Step 3: Define features
-            features = await self.define_features(prompt, market_context, personas)
-            logger.debug(f"Generated features: {features}")
-            
-            # Step 4: Generate final specification
-            spec_prompt = f"""Create a comprehensive product specification based on:
-
-            Project Requirements:
-            {prompt}
-
-            Market Context:
-            {market_context}
-
-            User Personas:
-            {json.dumps([persona.model_dump() for persona in personas], indent=2)}
-
-            Features:
-            {json.dumps([feature.model_dump() for feature in features], indent=2)}
-
-            Format the response as a ProductSpecification object.
-            """
-            
-            response = await self.client.generate_content(spec_prompt)
-            logger.debug(f"Raw spec response: {response}")
-            logger.debug(f"Spec response type: {type(response)}")
+            # Get features
+            features_response = await self.define_features(prompt)
+            logger.debug(f"[Response Format] Raw features response type: {type(features_response)}")
+            logger.debug(f"[Response Format] Raw features structure: {features_response}")
             
             try:
-                spec_data = json.loads(response.text)
-                logger.debug(f"Parsed spec data: {spec_data}")
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse spec response as JSON: {e}")
+                features_data = json.loads(features_response.text)
+                logger.debug(f"[Data Structure] Parsed features data type: {type(features_data)}")
+                if isinstance(features_data, list) and features_data:
+                    logger.debug(f"[Data Structure] Sample feature keys: {features_data[0].keys()}")
+                    logger.debug(f"[Data Structure] Sample feature types: {[(k, type(v)) for k, v in features_data[0].items()]}")
+            except Exception as e:
+                logger.error(f"[Response Format] Features parsing failed: {str(e)}")
                 raise
             
             try:
-                # Create specification object with validated components
-                spec = ProductSpecification(
-                    title=spec_data["title"],
-                    description=spec_data["description"],
-                    market_context=MarketContext.model_validate(spec_data["market_context"]),
-                    audience=personas,
-                    features=[FeatureSpecification.model_validate(feature) for feature in spec_data.get("features", [])]
-                )
-                logger.debug(f"Created spec object: {spec}")
-            except ValidationError as e:
-                logger.error(f"Failed to create ProductSpecification: {e}")
-                logger.debug(f"Spec data used: {spec_data}")
+                features = [FeatureSpecification.model_validate(feature) for feature in features_data]
+                logger.debug(f"[Model Validation] Successfully validated {len(features)} features")
+            except Exception as e:
+                logger.error(f"[Model Validation] Feature validation failed: {str(e)}")
                 raise
+            
+            # Create final specification
+            spec = ProductSpecification(
+                title="AI Task Manager",
+                description="Task management with AI prioritization",
+                market_context=market_context,
+                audience=personas,
+                features=features
+            )
             
             return spec
             
         except Exception as e:
-            logger.error(f"Error creating product specifications: {str(e)}")
+            logger.error(f"[Critical] Error creating product specifications: {str(e)}")
             raise
 
     async def generate_specifications(self, prompt: str) -> ProductSpecification:

@@ -34,7 +34,7 @@ class FileStructure(BaseModel):
 class AIIntegrationPoint(BaseModel):
     component: str
     purpose: str
-    model_requirements: List[str]
+    technical_requirements: List[str]
     input_format: Dict[str, Any]
     output_format: Dict[str, Any]
     validation_rules: List[str]
@@ -257,7 +257,7 @@ class Planner:
             {{
                 "component": "component_name",
                 "purpose": "detailed purpose description",
-                "model_requirements": ["requirement1", "requirement2"],
+                "technical_requirements": ["requirement1", "requirement2"],
                 "input_format": {{"field1": "type1", "field2": "type2"}},
                 "output_format": {{"field1": "type1", "field2": "type2"}},
                 "validation_rules": ["rule1", "rule2"],
@@ -518,8 +518,8 @@ To be generated.
 ### {point['component']}
 **Purpose:** {point['purpose']}
 
-**Model Requirements:**
-{chr(10).join(f'- {req}' for req in point['model_requirements'])}
+**Technical Requirements:**
+{chr(10).join(f'- {req}' for req in point['technical_requirements'])}
 
 **Input Format:**
 {json.dumps(point['input_format'], indent=2)}

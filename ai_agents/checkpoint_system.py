@@ -112,11 +112,11 @@ class CheckpointSystem:
                 "stage": checkpoint.stage,
                 "status": checkpoint.status,
                 "timestamp": checkpoint.timestamp.isoformat(),
-                "validation_result": checkpoint.validation_result.dict() if checkpoint.validation_result else None,
+                "validation_result": checkpoint.validation_result.model_dump() if checkpoint.validation_result else None,
                 "cross_validation_results": {
-                    role: feedback.dict()
+                    role: feedback.model_dump()
                     for role, feedback in (checkpoint.cross_validation_results or {}).items()
-                },
+                } if checkpoint.cross_validation_results else None,
                 "approved_by": checkpoint.approved_by,
                 "blocking_issues": checkpoint.blocking_issues
             }
