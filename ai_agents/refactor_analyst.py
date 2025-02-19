@@ -12,40 +12,33 @@ class RefactorAnalyst(BaseAgent):
     
     async def analyze_code_quality(self, 
                                  code: str,
-                                 metrics: Optional[Dict] = None) -> Dict:
+                                 metrics: Optional[Dict] = None) -> Dict[str, Any]:
         """Analyze code quality and identify refactoring opportunities."""
-        system_message = """You are a Code Quality Analyst specializing in identifying 
-        refactoring opportunities and architectural improvements. Focus on maintainability, 
-        performance, and modern best practices."""
+        system_message = """You are a Code Quality Expert focusing on maintainability, performance, and modern practices."""
         
-        context = f"Performance metrics:\n{metrics}\n" if metrics else ""
-        prompt = f"""{context}
-        Analyze the following code:
+        metrics_context = f"\nMetrics:\n{json.dumps(metrics, indent=2)}" if metrics else ""
+        
+        prompt = f"""Analyze the following code for quality and refactoring opportunities:
 
         {code}
+        {metrics_context}
 
-        Identify opportunities for improvement in:
+        Focus on:
         1. Code Structure
-           - Design patterns
-           - SOLID principles
-           - Component organization
         2. Performance
-           - Algorithm efficiency
-           - Resource usage
-           - Caching strategies
         3. Maintainability
-           - Code duplication
-           - Complexity
-           - Documentation
         4. Modern Practices
-           - Latest language features
-           - Framework capabilities
-           - Industry standards
         """
         
         try:
-            analysis = await self.get_completion(prompt, system_message, temperature=0.7)
-            return self._parse_analysis(analysis)
+            analysis = await self.get_completion(prompt, system_message)
+            sections = self._parse_sections(analysis)
+            return {
+                "code_structure": sections.get("Code Structure", []),
+                "performance": sections.get("Performance", []),
+                "maintainability": sections.get("Maintainability", []),
+                "modern_practices": sections.get("Modern Practices", [])
+            }
         except Exception as e:
             logger.error(f"Error analyzing code quality: {str(e)}")
             raise
@@ -163,13 +156,13 @@ class RefactorAnalyst(BaseAgent):
 
     async def assess_refactor_impact(self,
                                    suggestions: List[Dict],
-                                   codebase_stats: Dict[str, Any]) -> List[Dict]:
+                                   codebase_stats: Dict[str, Any]) -> Dict[str, List[str]]:
         """Assess the impact and risk of proposed refactoring changes."""
         system_message = """You are a Refactoring Impact Analyst specializing in
         evaluating the effects of code changes on system stability and performance."""
         
         prompt = f"""
-        Analyze the impact of proposed refactoring:
+        Analyze the impact of these refactoring suggestions:
 
         Suggestions:
         {json.dumps(suggestions, indent=2)}
@@ -177,28 +170,30 @@ class RefactorAnalyst(BaseAgent):
         Codebase Statistics:
         {json.dumps(codebase_stats, indent=2)}
 
-        For each suggestion, evaluate:
-        1. Scope of Impact
-           - Affected components
-           - Downstream dependencies
-           - Test coverage needs
-        2. Risk Assessment
-           - Technical complexity
-           - Migration challenges
-           - Potential regressions
-        3. Resource Requirements
-           - Development effort
-           - Testing effort
-           - Deployment complexity
-        4. Business Impact
-           - Performance gains
-           - Maintenance benefits
-           - Technical debt reduction
+        Provide analysis in these sections:
+        1. Risk Level
+           - Identify high/medium/low risk areas
+           - Note specific concerns
+        2. Dependencies
+           - List affected components
+           - Note integration points
+        3. Testing Requirements
+           - Required test coverage
+           - Specific test types needed
+        4. Timeline
+           - Implementation estimates
+           - Deployment considerations
         """
         
         try:
             assessment = await self.get_completion(prompt, system_message, temperature=0.6)
-            return self._parse_impact_assessment(assessment)
+            sections = self._parse_sections(assessment)
+            return {
+                "risk_level": sections.get("Risk Level", []),
+                "dependencies": sections.get("Dependencies", []),
+                "testing": sections.get("Testing Requirements", []),
+                "timeline": sections.get("Timeline", [])
+            }
         except Exception as e:
             logger.error(f"Error assessing refactor impact: {str(e)}")
             raise
@@ -272,48 +267,32 @@ class RefactorAnalyst(BaseAgent):
     
     def _parse_dependency_analysis(self, raw_analysis: str) -> Dict[str, Any]:
         """Parse dependency analysis into structured format."""
-        try:
-            # Extract sections using regex
-            sections = {
-                "coupling": re.findall(r"Component Coupling:\n(.*?)(?=\n\n|$)", 
-                                     raw_analysis, re.DOTALL),
-                "patterns": re.findall(r"Dependency Patterns:\n(.*?)(?=\n\n|$)", 
-                                     raw_analysis, re.DOTALL),
-                "architecture": re.findall(r"Architectural Alignment:\n(.*?)(?=\n\n|$)", 
-                                         raw_analysis, re.DOTALL),
-                "optimization": re.findall(r"Optimization Opportunities:\n(.*?)(?=\n\n|$)", 
-                                         raw_analysis, re.DOTALL)
-            }
+        sections = {}
+        current_section = None
+        current_items = []
+        
+        for line in raw_analysis.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+                
+            if line.endswith(':'):  # Section header
+                if current_section and current_items:
+                    sections[current_section] = current_items
+                current_section = line[:-1].strip()
+                current_items = []
+            elif line.startswith('- ') and current_section:
+                current_items.append(line[2:])
+        
+        if current_section and current_items:
+            sections[current_section] = current_items
             
-            # Structure the analysis
-            return {
-                "component_coupling": {
-                    "issues": self._extract_items(sections["coupling"], r"- (.*?)(?=\n|$)"),
-                    "recommendations": self._extract_items(sections["coupling"], 
-                                                        r"Recommendation: (.*?)(?=\n|$)")
-                },
-                "dependency_patterns": {
-                    "identified_patterns": self._extract_items(sections["patterns"], 
-                                                            r"- (.*?)(?=\n|$)"),
-                    "improvements": self._extract_items(sections["patterns"], 
-                                                     r"Improvement: (.*?)(?=\n|$)")
-                },
-                "architectural_alignment": {
-                    "violations": self._extract_items(sections["architecture"], 
-                                                   r"- (.*?)(?=\n|$)"),
-                    "solutions": self._extract_items(sections["architecture"], 
-                                                  r"Solution: (.*?)(?=\n|$)")
-                },
-                "optimization_opportunities": {
-                    "areas": self._extract_items(sections["optimization"], 
-                                              r"- (.*?)(?=\n|$)"),
-                    "suggestions": self._extract_items(sections["optimization"], 
-                                                    r"Suggestion: (.*?)(?=\n|$)")
-                }
-            }
-        except Exception as e:
-            logger.error(f"Error parsing dependency analysis: {str(e)}")
-            raise
+        return {
+            "coupling": sections.get("Component Coupling", []),
+            "patterns": sections.get("Dependency Patterns", []),
+            "architecture": sections.get("Architectural Alignment", []),
+            "optimization": sections.get("Optimization Opportunities", [])
+        }
 
     def _parse_impact_assessment(self, raw_assessment: str) -> List[Dict]:
         """Parse impact assessment into structured format."""
@@ -482,6 +461,24 @@ class RefactorAnalyst(BaseAgent):
         report.append("\n```\n")
         
         return "".join(report)
+
+    def _parse_sections(self, text: str) -> Dict[str, List[str]]:
+        """Parse sections from the analysis text."""
+        sections = {}
+        current_section = None
+        
+        for line in text.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+                
+            if line.endswith(':'):  # Section header
+                current_section = line[:-1].strip()
+                sections[current_section] = []
+            elif line.startswith('- ') and current_section:
+                sections[current_section].append(line[2:])
+                
+        return sections
 
 @click.command()
 @click.option('--code-dir', required=True, help='Directory containing the code to analyze')

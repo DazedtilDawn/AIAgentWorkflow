@@ -70,6 +70,29 @@ SAMPLE_CODEBASE_STATS = {
     "test_coverage": 65.5
 }
 
+SAMPLE_METRICS = {
+    "files": 10,
+    "lines": 500,
+    "classes": 10,
+    "functions": 20,
+    "dependencies": ["sqlite3", "redis", "logging"],
+    "test_coverage": 80.0
+}
+
+class AsyncMockResponse:
+    """Mock async Gemini API response."""
+    def __init__(self, text):
+        self.text = text
+        self.candidates = [self]  # Gemini API expects candidates
+
+    async def __call__(self, *args, **kwargs):
+        return self
+
+    def __await__(self):
+        async def _async_result():
+            return self
+        return _async_result().__await__()
+
 @pytest.fixture
 def refactor_analyst():
     """Create a RefactorAnalyst instance for testing."""
@@ -79,9 +102,7 @@ def refactor_analyst():
 @pytest.mark.asyncio
 async def test_analyze_code_quality(refactor_analyst):
     """Test code quality analysis."""
-    # Mock AI response
-    mock_response = MagicMock()
-    mock_response.text = """
+    mock_response = AsyncMockResponse("""
 Code Structure:
 - High coupling between UserService and dependencies
 - Direct SQL queries pose security risk
@@ -101,235 +122,215 @@ Modern Practices:
 - Consider using ORM
 - Implement dependency injection
 - Add type hints
-"""
+""")
     
     with patch('google.generativeai.GenerativeModel.generate_content', 
                return_value=mock_response):
         analysis = await refactor_analyst.analyze_code_quality(SAMPLE_CODE)
         
         assert isinstance(analysis, dict)
-        assert "code_structure" in analysis
-        assert "performance" in analysis
-        assert "maintainability" in analysis
-        assert "modern_practices" in analysis
+        assert all(key in analysis for key in ["code_structure", "performance", "maintainability", "modern_practices"])
+        assert len(analysis["code_structure"]) > 0
+        assert len(analysis["performance"]) > 0
+        assert len(analysis["maintainability"]) > 0
+        assert len(analysis["modern_practices"]) > 0
 
 @pytest.mark.asyncio
 async def test_analyze_dependencies(refactor_analyst):
     """Test dependency analysis."""
-    # Mock AI response
-    mock_response = MagicMock()
-    mock_response.text = """
+    mock_response = AsyncMockResponse("""
 Component Coupling:
-- UserService has tight coupling with Database
-- Direct dependency on concrete implementations
-Recommendation: Use dependency injection
+- High coupling between Service and Repository layers
+- Direct database access in controllers
+- Tight coupling with external services
 
 Dependency Patterns:
-- Circular dependency risk between Cache and Database
-- Missing repository pattern
-Improvement: Implement repository pattern
+- Circular dependency in user management
+- Missing dependency injection
+- Service locator anti-pattern
 
 Architectural Alignment:
-- Database access in service layer
-- Missing clear boundaries
-Solution: Introduce repository layer
+- Layer violations in data access
+- Direct repository access from UI
+- Missing interface abstractions
 
 Optimization Opportunities:
-- Shared caching logic
-- Duplicate logging setup
-Suggestion: Create shared infrastructure layer
-"""
+- Consolidate service interfaces
+- Implement repository pattern
+- Extract common dependencies
+""")
     
     with patch('google.generativeai.GenerativeModel.generate_content', 
                return_value=mock_response):
-        analysis = await refactor_analyst.analyze_dependencies(
-            SAMPLE_CODE_FILES, SAMPLE_ARCHITECTURE
-        )
+        analysis = await refactor_analyst.analyze_dependencies({"test.py": SAMPLE_CODE})
         
         assert isinstance(analysis, dict)
-        assert "component_coupling" in analysis
-        assert "dependency_patterns" in analysis
-        assert "architectural_alignment" in analysis
-        assert "optimization_opportunities" in analysis
+        assert all(key in analysis for key in ["coupling", "patterns", "architecture", "optimization"])
+        assert len(analysis["coupling"]) > 0
+        assert len(analysis["patterns"]) > 0
+        assert len(analysis["architecture"]) > 0
+        assert len(analysis["optimization"]) > 0
 
 @pytest.mark.asyncio
 async def test_assess_refactor_impact(refactor_analyst):
     """Test refactoring impact assessment."""
-    suggestions = [{
-        "title": "Implement Dependency Injection",
-        "description": "Replace direct instantiation with DI container"
-    }]
-    
-    # Mock AI response
-    mock_response = MagicMock()
-    mock_response.text = """
-Suggestion 1:
-Scope of Impact:
-- Affected components: UserService, Database, Cache, Logger
-Dependencies: All service classes
-Testing: Update all service tests
+    mock_response = AsyncMockResponse("""
+Risk Level:
+- High risk in authentication changes
+- Medium risk in database access
+- Low risk in UI updates
 
-Risk Assessment:
-Complexity: Medium
-Challenges: Service initialization changes
-Regressions: Potential service startup issues
+Dependencies:
+- User service affected
+- Cache system impacted
+- API endpoints need updates
 
-Resource Requirements:
-Development: 3-5 days
-Testing: 2-3 days
-Deployment: Requires careful staging
+Testing Requirements:
+- Full regression suite
+- Performance benchmarks
+- Security audit
 
-Business Impact:
-Performance: Minimal immediate impact
-Maintenance: Significant improvement
-Tech Debt: Major reduction
-"""
+Timeline:
+- Estimated 2-3 sprints
+- Phased rollout recommended
+- Requires coordination
+""")
     
     with patch('google.generativeai.GenerativeModel.generate_content', 
                return_value=mock_response):
-        assessment = await refactor_analyst.assess_refactor_impact(
-            suggestions, SAMPLE_CODEBASE_STATS
+        impact = await refactor_analyst.assess_refactor_impact(
+            [{"name": "Auth Refactor", "description": "Update auth system"}],
+            SAMPLE_METRICS
         )
         
-        assert isinstance(assessment, list)
-        assert len(assessment) > 0
-        assert "scope" in assessment[0]
-        assert "risk" in assessment[0]
-        assert "resources" in assessment[0]
-        assert "business_impact" in assessment[0]
+        assert isinstance(impact, dict)
+        assert all(key in impact for key in ["risk_level", "dependencies", "testing", "timeline"])
+        assert len(impact["risk_level"]) > 0
+        assert len(impact["dependencies"]) > 0
+        assert len(impact["testing"]) > 0
+        assert len(impact["timeline"]) > 0
 
 @pytest.mark.asyncio
 async def test_generate_automated_refactorings(refactor_analyst):
-    """Test automated refactoring suggestion generation."""
-    analysis = {
-        "code_structure": ["High coupling", "Direct SQL queries"],
-        "performance": ["Inefficient caching"],
-        "maintainability": ["Limited test coverage"]
-    }
-    
-    # Mock AI response
-    mock_response = MagicMock()
-    mock_response.text = """
-Suggestion 1:
-Code Changes:
-File: user_service.py
-Line: 2-4
-Change: Replace direct instantiation with dependency injection
-
-Examples:
+    """Test automated refactoring generation."""
+    mock_response = AsyncMockResponse("""
+Refactoring 1: Implement Dependency Injection
 Before:
 ```python
-def __init__(self):
-    self.db = Database()
-    self.logger = Logger()
-    self.cache = Cache()
+class UserService:
+    def __init__(self):
+        self.db = Database()
 ```
 
 After:
 ```python
-def __init__(self, db: Database, logger: Logger, cache: Cache):
-    self.db = db
-    self.logger = logger
-    self.cache = cache
+class UserService:
+    def __init__(self, db: Database):
+        self.db = db
 ```
 
-Explanation:
-Implements dependency injection to reduce coupling and improve testability.
+Refactoring 2: Extract Interface
+Before:
+```python
+class Database:
+    def query(self):
+        pass
+```
 
-Testing:
-- Update UserService constructor tests
-- Add integration tests for DI container
-Validation: Verify all services initialize correctly
-"""
+After:
+```python
+from abc import ABC, abstractmethod
+
+class IDatabase(ABC):
+    @abstractmethod
+    def query(self):
+        pass
+```
+""")
     
     with patch('google.generativeai.GenerativeModel.generate_content', 
                return_value=mock_response):
-        suggestions = await refactor_analyst.generate_automated_refactorings(
-            SAMPLE_CODE, analysis
-        )
+        code = "class UserService:\n    def __init__(self):\n        self.db = Database()"
+        analysis = {
+            "coupling": ["High coupling with Database"],
+            "patterns": ["Missing dependency injection"]
+        }
         
-        assert isinstance(suggestions, list)
-        assert len(suggestions) > 0
-        assert "changes" in suggestions[0]
-        assert "examples" in suggestions[0]
-        assert "explanation" in suggestions[0]
-        assert "testing" in suggestions[0]
+        refactorings = await refactor_analyst.generate_automated_refactorings(code, analysis)
+        
+        assert isinstance(refactorings, list)
+        assert len(refactorings) > 0
+        assert "before" in refactorings[0]
+        assert "after" in refactorings[0]
+        assert "description" in refactorings[0]
 
 @pytest.mark.asyncio
 async def test_update_cursor_rules(refactor_analyst):
-    """Test cursor rules update."""
-    suggestions = [{
-        "category": "code_structure",
-        "changes": [{
-            "file": "user_service.py",
-            "change": "Implement dependency injection"
-        }]
-    }]
-    
-    # Mock AI response
-    mock_response = MagicMock()
-    mock_response.text = """
-{
-    "rules": {
-        "dependency_injection": {
-            "pattern": "new (?:Database|Logger|Cache)\\(\\)",
-            "message": "Use dependency injection instead of direct instantiation",
-            "severity": "warning"
-        },
-        "sql_injection": {
-            "pattern": "SELECT.*\\{.*\\}",
-            "message": "Potential SQL injection risk",
-            "severity": "error"
-        }
+    """Test cursor rules update generation."""
+    mock_response = AsyncMockResponse("""
+[
+    {
+        "name": "dependency_injection",
+        "pattern": "class.*?\\s*def\\s*__init__\\s*\\(\\s*self\\s*\\)\\s*:",
+        "message": "Consider using dependency injection for better testability",
+        "severity": "warning"
+    },
+    {
+        "name": "interface_abstraction",
+        "pattern": "class\\s+\\w+\\s*:",
+        "message": "Consider defining an interface for better abstraction",
+        "severity": "info"
     }
-}
-"""
+]
+""")
     
     with patch('google.generativeai.GenerativeModel.generate_content', 
                return_value=mock_response):
+        suggestions = [{
+            "title": "Implement Dependency Injection",
+            "description": "Replace direct instantiation with DI"
+        }]
+        
         rules = await refactor_analyst.update_cursor_rules(suggestions)
         
         assert isinstance(rules, str)
         assert "dependency_injection" in rules
-        assert "sql_injection" in rules
+        assert "pattern" in rules
+        assert "message" in rules
 
 def test_parse_dependency_analysis():
     """Test dependency analysis parsing."""
-    analyst = RefactorAnalyst()
     raw_analysis = """
 Component Coupling:
-- High coupling with Database
-- Direct instantiation
-Recommendation: Use dependency injection
+- High coupling between modules
+- Direct database access
+- Tight service dependencies
 
 Dependency Patterns:
-- Circular dependencies
-- Missing abstractions
-Improvement: Add interfaces
+- Circular dependencies found
+- Missing dependency injection
+- Service locator usage
 
 Architectural Alignment:
-- Layer violations
-- Mixed concerns
-Solution: Separate layers
+- Layer violations detected
+- Direct repository access
+- Missing abstractions
 
 Optimization Opportunities:
-- Shared caching
-- Duplicate logging
-Suggestion: Create shared services
+- Consolidate interfaces
+- Implement repository pattern
+- Extract shared dependencies
 """
-    
+    analyst = RefactorAnalyst()
     result = analyst._parse_dependency_analysis(raw_analysis)
     
     assert isinstance(result, dict)
-    assert "component_coupling" in result
-    assert "dependency_patterns" in result
-    assert "architectural_alignment" in result
-    assert "optimization_opportunities" in result
-    
-    assert len(result["component_coupling"]["issues"]) > 0
-    assert len(result["dependency_patterns"]["improvements"]) > 0
-    assert len(result["architectural_alignment"]["solutions"]) > 0
-    assert len(result["optimization_opportunities"]["suggestions"]) > 0
+    assert all(key in result for key in ["coupling", "patterns", "architecture", "optimization"])
+    assert len(result["coupling"]) == 3
+    assert len(result["patterns"]) == 3
+    assert len(result["architecture"]) == 3
+    assert len(result["optimization"]) == 3
+    assert "High coupling between modules" in result["coupling"]
 
 def test_parse_impact_assessment():
     """Test impact assessment parsing."""
